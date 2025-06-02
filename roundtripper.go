@@ -11,7 +11,7 @@
 // Example usage:
 //
 //	client := &http.Client{
-//		Transport: httpcache.New(myCache, httpcache.WithLogger(myLogger)),
+//		Transport: httpcache.NewTransport(myCache, httpcache.WithLogger(myLogger)),
 //	}
 package httpcache
 
