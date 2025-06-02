@@ -1,0 +1,60 @@
+name: Test
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    env:
+      OUTPUTDIR: coverage
+      COVERPROFILE: coverage.out
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.4.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Run tests
+        run: make test
+
+      - name: Upload coverage reports to Codecov
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+        uses: codecov/codecov-action@0565863a31f2c772f9f0395002a31e3f06189574 # v5.4.0
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ${{ env.OUTPUTDIR }}/${{ env.COVERPROFILE }}
+          flags: unittests
+          disable_search: true
+          verbose: true
+
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    needs: [test]
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') }}
+    permissions:
+      contents: write
+      issues: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.4.0
+        with:
+          go-version-file: go.mod
+      - uses: goreleaser/goreleaser-action@9c156ee8a17a598857849441385a2041ef570552 # v6.3.0
+        with:
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

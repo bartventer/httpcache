@@ -1,0 +1,21 @@
+{
+    "go.testFlags": [
+        "-race",
+        "-v",
+    ],
+    "go.testTimeout": "5m",
+    "gopls": {
+        "ui.semanticTokens": false
+    },
+    "go.lintTool": "golangci-lint-v2", // See https://github.com/golang/vscode-go/issues/3732
+    "go.lintFlags": [
+        "run",
+        "--issues-exit-code=0",
+        "--output.text.colors=true",
+        "--output.text.path=stdout",
+        "--output.text.print-issued-lines=false",
+        "--show-stats=false",
+        "--fix"
+    ],
+    "editor.detectIndentation": true
+}

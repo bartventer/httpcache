@@ -1,0 +1,7 @@
+{
+  "name": "HTTP Cache Development Container",
+  "image": "ghcr.io/bartventer/devcontainer-images/go-archlinux:latest",
+  "remoteEnv": {
+    "WORKSPACE": "${containerWorkspaceFolder}"
+  }
+}
