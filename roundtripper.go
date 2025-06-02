@@ -1,7 +1,7 @@
 // Package httpcache provides an implementation of http.RoundTripper that adds
 // transparent HTTP response caching according to RFC 9111 (HTTP Caching).
 //
-// The primary entry point is [New], which returns an [http.RoundTripper] that can
+// The primary entry point is [NewTransport], which returns an [http.RoundTripper] that can
 // be used with [http.Client] to cache HTTP responses in a user-provided Cache.
 //
 // The package supports standard HTTP caching semantics, including validation,
@@ -110,11 +110,11 @@ const DefaultSWRTimeout = 5 * time.Second // Default timeout for Stale-While-Rev
 //	}()
 var ErrNilCache = errors.New("httpcache: cache cannot be nil")
 
-// New creates a new [http.RoundTripper] that caches HTTP responses.
+// NewTransport creates a new [http.RoundTripper] that caches HTTP responses.
 // It requires a non-nil [Cache] implementation to store and retrieve cached responses.
 // It also accepts functional options to configure the transport, SWR timeout,
 // and logger. If the cache is nil, it panics with [ErrNilCache].
-func New(cache Cache, options ...Option) http.RoundTripper {
+func NewTransport(cache Cache, options ...Option) http.RoundTripper {
 	if cache == nil {
 		panic(ErrNilCache)
 	}

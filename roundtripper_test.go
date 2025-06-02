@@ -528,7 +528,7 @@ func TestNew(t *testing.T) {
 	l := slog.New(slog.DiscardHandler)
 	swrTimeout := 100 * time.Millisecond
 	mockCache := &internal.MockCache{}
-	rt := New(mockCache, WithTransport(mockTransport),
+	rt := NewTransport(mockCache, WithTransport(mockTransport),
 		WithLogger(l),
 		WithSWRTimeout(swrTimeout),
 	)
@@ -538,13 +538,17 @@ func TestNew(t *testing.T) {
 	testutil.AssertEqual(t, swrTimeout, rt.(*roundTripper).swrTimeout)
 }
 
-func TestNew_Panic(t *testing.T) {
+func TestNewTransport_Panic(t *testing.T) {
 	panicked := false
 	defer func() {
 		if r := recover(); r != nil {
 			panicked = true
 		}
 	}()
-	New(nil, WithTransport(http.DefaultTransport), WithLogger(slog.New(slog.DiscardHandler)))
+	NewTransport(
+		nil,
+		WithTransport(http.DefaultTransport),
+		WithLogger(slog.New(slog.DiscardHandler)),
+	)
 	testutil.AssertTrue(t, panicked, "expected panic when cache is nil")
 }

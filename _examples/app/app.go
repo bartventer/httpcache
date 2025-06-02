@@ -32,7 +32,7 @@ func main() {
 	url := ts.URL
 	cache := NewDummyCache()
 	client := &http.Client{
-		Transport: httpcache.New(cache),
+		Transport: httpcache.NewTransport(cache),
 	}
 
 	fmt.Println(strings.Repeat("=", 60))
