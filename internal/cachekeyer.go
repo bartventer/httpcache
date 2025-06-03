@@ -19,10 +19,6 @@ func (f CacheKeyerFunc) CacheKey(u *url.URL) string {
 
 func NewCacheKeyer() CacheKeyer { return CacheKeyerFunc(makeKey) }
 
-// func (c *cacheKeyer) CacheKey(u *url.URL) string {
-// 	return MakeKey(u)
-// }
-
 // makeKey generates a cache key for the given URL according to RFC 9111 §4.1.
 // The cache key consists of the scheme, host (including port if non-default), path, and query string,
 // but excludes the fragment. The path is encoded using [net/url.EscapedPath]() to ensure proper normalization.

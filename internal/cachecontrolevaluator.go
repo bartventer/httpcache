@@ -62,28 +62,6 @@ func NewCacheabilityEvaluator() CacheabilityEvaluator {
 	return CacheabilityEvaluatorFunc(canStoreResponse)
 }
 
-// type StaleIfErrorPolicy interface {
-// 	CanStaleOnError(clock Clock, freshness *Freshness, sies ...StaleIfErrorer) bool
-// }
-
-// type StaleIfErrorPolicyFunc func(
-// 	clock Clock,
-// 	freshness *Freshness,
-// 	sies ...StaleIfErrorer,
-// ) bool
-
-// func (f StaleIfErrorPolicyFunc) CanStaleOnError(
-// 	clock Clock,
-// 	freshness *Freshness,
-// 	sies ...StaleIfErrorer,
-// ) bool {
-// 	return f(clock, freshness, sies...)
-// }
-
-// func NewStaleIfErrorPolicy() StaleIfErrorPolicy {
-// 	return StaleIfErrorPolicyFunc(canStaleOnError)
-// }
-
 // StaleIfErrorPolicy describes the interface implemented by types that can
 // evaluate cache control directives for storing responses (RFC 9111 §3) and
 // determining whether a stale response can be served in case of an error (RFC 5861 §4).
