@@ -232,13 +232,25 @@ func (r *roundTripper) handleCacheHit(
 	ccReq := internal.ParseCCRequestDirectives(req.Header)
 	ccResp := internal.ParseCCResponseDirectives(storedEntry.Response.Header)
 	freshness := r.fc.CalculateFreshness(storedEntry, ccReq, ccResp)
-	_, ccRespNoCache := ccResp.NoCache()
+	ccRespNoCacheFieldsRaw, ccRespNoCachePresent := ccResp.NoCache()
+	noCacheFieldsSeq, noCacheQualified := ccRespNoCacheFieldsRaw.Value()
 
 	if freshness.IsStale && ccResp.MustRevalidate() {
 		goto revalidate
 	}
 
-	if ccReq.OnlyIfCached() || (!freshness.IsStale && !ccReq.NoCache() && !ccRespNoCache) {
+	if ccRespNoCachePresent && !noCacheQualified {
+		// Unqualified no-cache: must revalidate before serving from cache
+		goto revalidate
+	}
+
+	if ccReq.OnlyIfCached() || (!freshness.IsStale && !ccReq.NoCache()) {
+		if noCacheQualified {
+			//Qualified no-cache: may serve from cache with fields stripped
+			for field := range noCacheFieldsSeq {
+				storedEntry.Response.Header.Del(field)
+			}
+		}
 		internal.SetAgeHeader(storedEntry.Response, r.clock, freshness.Age)
 		internal.CacheStatusHit.ApplyTo(storedEntry.Response.Header)
 		return storedEntry.Response, nil
