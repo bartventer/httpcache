@@ -127,6 +127,110 @@ func TestRoundTripper_CacheHit(t *testing.T) {
 	assertCacheStatus(t, resp, internal.CacheStatusHit)
 }
 
+func TestRoundTripper_CacheHit_MustRevalidate_Stale(t *testing.T) {
+	storedResp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Cache-Control": []string{"max-age=0, must-revalidate"}},
+		Body:       http.NoBody,
+	}
+	storedEntry := &internal.Entry{Response: storedResp, ReqTime: time.Now(), RespTime: time.Now()}
+	mockVHCalled := false
+
+	rt := newTestRoundTripper(func(rt *roundTripper) {
+		rt.cache = &internal.MockResponseCache{
+			GetFunc: func(key string, req *http.Request) (*internal.Entry, error) { return storedEntry, nil },
+		}
+		rt.fc = &internal.MockFreshnessCalculator{
+			CalculateFreshnessFunc: func(resp *http.Response, reqCC internal.CCRequestDirectives, resCC internal.CCResponseDirectives) *internal.Freshness {
+				return &internal.Freshness{IsStale: true, Age: &internal.Age{}, UsefulLife: 0}
+			},
+		}
+		rt.vh = &internal.MockValidationResponseHandler{
+			HandleValidationResponseFunc: func(ctx internal.RevalidationContext, req *http.Request, resp *http.Response, err error) (*http.Response, error) {
+				mockVHCalled = true
+				return resp, err
+			},
+		}
+	})
+
+	req, _ := http.NewRequest(http.MethodGet, "http://example.com", nil)
+	resp, err := rt.RoundTrip(req)
+	testutil.RequireNoError(t, err)
+	testutil.AssertTrue(t, mockVHCalled)
+	testutil.AssertNotNil(t, resp)
+}
+
+func TestRoundTripper_CacheHit_NoCacheUnqualified(t *testing.T) {
+	storedResp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Cache-Control": []string{"max-age=60, no-cache"}},
+		Body:       http.NoBody,
+	}
+	storedEntry := &internal.Entry{Response: storedResp, ReqTime: time.Now(), RespTime: time.Now()}
+	mockVHCalled := false
+
+	rt := newTestRoundTripper(func(rt *roundTripper) {
+		rt.cache = &internal.MockResponseCache{
+			GetFunc: func(key string, req *http.Request) (*internal.Entry, error) { return storedEntry, nil },
+		}
+		rt.vh = &internal.MockValidationResponseHandler{
+			HandleValidationResponseFunc: func(ctx internal.RevalidationContext, req *http.Request, resp *http.Response, err error) (*http.Response, error) {
+				mockVHCalled = true
+				return resp, err
+			},
+		}
+	})
+
+	req, _ := http.NewRequest(http.MethodGet, "http://example.com", nil)
+	resp, err := rt.RoundTrip(req)
+	testutil.RequireNoError(t, err)
+	testutil.AssertTrue(t, mockVHCalled)
+	testutil.AssertNotNil(t, resp)
+}
+func TestRoundTripper_CacheHit_NoCacheQualified_StripsFields(t *testing.T) {
+	storedResp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header: http.Header{
+			"Cache-Control": []string{`max-age=60, no-cache="Foo,Bar"`},
+			"Foo":           []string{"should-be-removed"},
+			"Bar":           []string{"should-be-removed"},
+			"Baz":           []string{"should-stay"},
+		},
+		Body: http.NoBody,
+	}
+	storedEntry := &internal.Entry{Response: storedResp, ReqTime: time.Now(), RespTime: time.Now()}
+
+	rt := newTestRoundTripper(func(rt *roundTripper) {
+		rt.cache = &internal.MockResponseCache{
+			GetFunc: func(key string, req *http.Request) (*internal.Entry, error) { return storedEntry, nil },
+		}
+	})
+
+	req, _ := http.NewRequest(http.MethodGet, "http://example.com", nil)
+	resp, err := rt.RoundTrip(req)
+	testutil.RequireNoError(t, err)
+	testutil.AssertEqual(t, "", resp.Header.Get("Foo"))
+	testutil.AssertEqual(t, "", resp.Header.Get("Bar"))
+	testutil.AssertEqual(t, "should-stay", resp.Header.Get("Baz"))
+}
+
+func TestRoundTripper_UnrecognizedSafeMethod_Error(t *testing.T) {
+	rt := newTestRoundTripper(func(rt *roundTripper) {
+		rt.rmc = &internal.MockRequestMethodChecker{
+			IsRequestMethodUnderstoodFunc: func(req *http.Request) bool { return false },
+		}
+		rt.transport = &internal.MockRoundTripper{
+			RoundTripFunc: func(req *http.Request) (*http.Response, error) {
+				return nil, testutil.ErrSample
+			},
+		}
+	})
+	req, _ := http.NewRequest(http.MethodTrace, "http://example.com", nil) // TRACE is a safe method
+	resp, err := rt.RoundTrip(req)
+	testutil.RequireErrorIs(t, err, testutil.ErrSample)
+	testutil.AssertNil(t, resp)
+}
+
 func TestRoundTripper_NotUnderstoodAndUnsafeMethod(t *testing.T) {
 	roundTripperCalled := false
 	invalidateCalled := false
