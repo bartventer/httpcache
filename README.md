@@ -20,7 +20,7 @@
 
 ![Made with VHS](https://vhs.charm.sh/vhs-3WOBtYTZzzXggFGYRudHTV.gif)
 
-_Refer to [_examples/app](_examples/app/app.go) for the source code._
+*Refer to [_examples/app](_examples/app/app.go) for the source code.*
 
 ## Quick Start
 
@@ -63,9 +63,11 @@ type Cache interface {
 
 ## Options
 
-- `WithTransport(tr http.RoundTripper)`: Set the underlying transport (default: `http.DefaultTransport`).
-- `WithSWRTimeout(timeout time.Duration)`: Set the stale-while-revalidate timeout (default: `5s`).
-- `WithLogger(logger *slog.Logger)`: Set a logger (default: discard).
+| Option                             | Description                            | Default Value                   |
+| ---------------------------------- | -------------------------------------- | ------------------------------- |
+| `WithTransport(http.RoundTripper)` | Set the underlying transport           | `http.DefaultTransport`         |
+| `WithSWRTimeout(time.Duration)`    | Set the stale-while-revalidate timeout | `5s`                            |
+| `WithLogger(*slog.Logger)`         | Set a logger for debug output          | `slog.New(slog.DiscardHandler)` |
 
 ## Supported Cache-Control Directives
 
@@ -87,7 +89,7 @@ type Cache interface {
 
 ## Cache Status Header
 
-Every response includes a cache status header to indicate how the response was served:
+Every response includes a cache status header to indicate how the response was served. The header is named `X-Cache-Status` and can have the following values:
 
 | Status        | Description             |
 | ------------- | ----------------------- |
@@ -97,6 +99,17 @@ Every response includes a cache status header to indicate how the response was s
 | `REVALIDATED` | Revalidated with origin |
 | `BYPASS`      | Cache bypassed          |
 
+### Example
+
+```http
+X-Cache-Status: HIT
+```
+
+## Limitations
+
+- **Range Requests & Partial Content:**
+  This cache does **not** support HTTP range requests or partial/incomplete responses (e.g., status code 206, `Range`/`Content-Range` headers). All requests with a `Range` header are bypassed, and 206 responses are not cached. See [RFC 9111 §3.3-3.4](https://www.rfc-editor.org/rfc/rfc9111#section-3.3) for details.
+
 ## License
 
-This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). See the [LICENSE](LICENSE) file for details.
