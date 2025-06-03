@@ -232,8 +232,12 @@ func (r *roundTripper) handleCacheHit(
 	ccReq := internal.ParseCCRequestDirectives(req.Header)
 	ccResp := internal.ParseCCResponseDirectives(storedEntry.Response.Header)
 	freshness := r.fc.CalculateFreshness(storedEntry, ccReq, ccResp)
-
 	_, ccRespNoCache := ccResp.NoCache()
+
+	if freshness.IsStale && ccResp.MustRevalidate() {
+		goto revalidate
+	}
+
 	if ccReq.OnlyIfCached() || (!freshness.IsStale && !ccReq.NoCache() && !ccRespNoCache) {
 		internal.SetAgeHeader(storedEntry.Response, r.clock, freshness.Age)
 		internal.CacheStatusHit.ApplyTo(storedEntry.Response.Header)
@@ -248,6 +252,7 @@ func (r *roundTripper) handleCacheHit(
 		}
 	}
 
+revalidate:
 	req = withConditionalHeaders(req, storedEntry.Response.Header)
 	var start, end time.Time
 	resp, start, end, err := r.roundTripTimed(req)
