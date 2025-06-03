@@ -313,12 +313,7 @@ func (r *roundTripper) performBackgroundRevalidation(
 	done := make(chan struct{})
 	var swrErr error
 	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				sl.Error("SWR background revalidation panic", slog.Any("panic", r))
-			}
-			close(done)
-		}()
+		defer close(done)
 		sl.Debug("SWR background revalidation started")
 		swrErr = r.backgroundRevalidate(req, storedEntry, cacheKey, freshness, ccReq)
 	}()
