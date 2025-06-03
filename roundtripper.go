@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-
 	"time"
 
 	"github.com/bartventer/httpcache/internal"
@@ -77,16 +76,16 @@ type roundTripper struct {
 
 	// Internal details
 
-	rmc   internal.RequestMethodChecker      // Request method checker for understanding request methods
-	vmc   internal.VaryMatcher               // Vary matcher for checking Vary headers
-	cke   internal.CacheKeyer                // Cache keyer for generating cache keys
-	fc    internal.FreshnessCalculator       // Freshness calculator for determining freshness of cached responses
-	ce    internal.CacheabilityEvaluator     // Cacheability evaluator for determining if a response can be cached
-	siep  internal.StaleIfErrorPolicy        // Stale-If-Error policy handler
-	ci    internal.CacheInvalidator          // Cache invalidator for handling cache invalidation
-	rs    internal.ResponseStorer            // Handler for storing responses in the cache
-	vh    internal.ValidationResponseHandler // Handler for validation responses
-	clock internal.Clock                     // Clock for time-related operations, can be mocked for testing
+	rmc   internal.RequestMethodChecker      // Checks if HTTP request methods are understood
+	vmc   internal.VaryMatcher               // Matches Vary headers to determine cache validity
+	cke   internal.CacheKeyer                // Generates unique cache keys for requests
+	fc    internal.FreshnessCalculator       // Calculates the freshness of cached responses
+	ce    internal.CacheabilityEvaluator     // Evaluates if a response is cacheable
+	siep  internal.StaleIfErrorPolicy        // Handles stale-if-error caching policies
+	ci    internal.CacheInvalidator          // Invalidates cache entries based on conditions
+	rs    internal.ResponseStorer            // Stores HTTP responses in the cache
+	vh    internal.ValidationResponseHandler // Processes validation responses for revalidation
+	clock internal.Clock                     // Provides time-related operations, can be mocked for testing
 }
 
 const DefaultSWRTimeout = 5 * time.Second // Default timeout for Stale-While-Revalidate
@@ -95,13 +94,18 @@ const DefaultSWRTimeout = 5 * time.Second // Default timeout for Stale-While-Rev
 // Although not recommended, it is possible to handle this error gracefully
 // by recovering from the panic that occurs when a nil cache is passed.
 //
-// For example:
+// Example usage:
 //
 //	defer func() {
 //		if r := recover(); r != nil {
 //			if err, ok := r.(error); ok && errors.Is(err, ErrNilCache) {
 //				// Handle the error gracefully, e.g., log it or return a default transport
 //				log.Println("Cache cannot be nil:", err)
+//				client := &http.Client{
+//					Transport: http.DefaultTransport, // Fallback to default transport
+//				}
+//				// Use the fallback client as needed
+//				_ = client
 //			} else {
 //				// Re-panic if it's not the expected error
 //				panic(r)
@@ -110,10 +114,29 @@ const DefaultSWRTimeout = 5 * time.Second // Default timeout for Stale-While-Rev
 //	}()
 var ErrNilCache = errors.New("httpcache: cache cannot be nil")
 
+// Functional options allow customization of the behavior of the returned [http.RoundTripper].
+
 // NewTransport creates a new [http.RoundTripper] that caches HTTP responses.
 // It requires a non-nil [Cache] implementation to store and retrieve cached responses.
 // It also accepts functional options to configure the transport, SWR timeout,
 // and logger. If the cache is nil, it panics with [ErrNilCache].
+//
+// # Functional options
+//
+// [WithTransport] sets the underlying HTTP transport for making requests. For example:
+//
+//	transport := httpcache.NewTransport(myCache, httpcache.WithTransport(http.DefaultTransport))
+//
+// [WithLogger] sets a logger for debug output. For example:
+//
+//	logger := slog.New(slog.NewJSONHandler(os.Stdout))
+//	transport := httpcache.NewTransport(myCache, httpcache.WithLogger(logger))
+//
+// [WithSWRTimeout] sets the timeout for Stale-While-Revalidate requests. For example:
+//
+//	transport := httpcache.NewTransport(myCache, httpcache.WithSWRTimeout(10*time.Second))
+//
+// These options can be combined to tailor the behavior of the transport to specific needs.
 func NewTransport(cache Cache, options ...Option) http.RoundTripper {
 	if cache == nil {
 		panic(ErrNilCache)
@@ -144,55 +167,68 @@ func NewTransport(cache Cache, options ...Option) http.RoundTripper {
 
 var _ http.RoundTripper = (*roundTripper)(nil)
 
-//nolint:cyclop,funlen // Cyclomatic complexity is high due to multiple conditions, but it's necessary for RFC compliance.
 func (r *roundTripper) RoundTrip(req *http.Request) (resp *http.Response, err error) {
 	cacheKey := r.cke.CacheKey(req.URL)
 
-	// 1. Check if method is understood
-	//nolint:nestif // Nesting is necessary to handle different request methods and caching logic.
 	if !r.rmc.IsRequestMethodUnderstood(req) {
-		if !isUnsafeMethod(req) {
-			resp, err = r.transport.RoundTrip(req)
-			if err != nil {
-				return nil, err
-			}
-			internal.CacheStatusBypass.ApplyTo(resp.Header)
-			return resp, nil
-		}
-		resp, err = r.transport.RoundTrip(req)
+		return r.handleUnrecognizedMethod(req, cacheKey)
+	}
+
+	storedEntry, err := r.cache.Get(cacheKey, req)
+	if err != nil || storedEntry == nil ||
+		!r.vmc.VaryHeadersMatch(storedEntry.Response.Header, req.Header) {
+		return r.handleCacheMiss(req, cacheKey)
+	}
+
+	return r.handleCacheHit(req, storedEntry, cacheKey)
+}
+
+func (r *roundTripper) handleUnrecognizedMethod(
+	req *http.Request,
+	cacheKey string,
+) (*http.Response, error) {
+	if !isUnsafeMethod(req) {
+		resp, err := r.transport.RoundTrip(req)
 		if err != nil {
 			return nil, err
-		}
-		if isNonErrorStatus(resp.StatusCode) {
-			r.ci.InvalidateCache(req.URL, resp.Header, cacheKey)
 		}
 		internal.CacheStatusBypass.ApplyTo(resp.Header)
 		return resp, nil
 	}
-
-	// 2. Try to get a cached entry
-	storedEntry, err := r.cache.Get(cacheKey, req)
-	if err != nil || storedEntry == nil ||
-		!r.vmc.VaryHeadersMatch(storedEntry.Response.Header, req.Header) {
-		ccReq := internal.ParseCCRequestDirectives(req.Header)
-		if ccReq.OnlyIfCached() {
-			return make504Response(req)
-		}
-		// Cache miss
-		var start, end time.Time
-		resp, start, end, err = r.roundTripTimed(req)
-		if err != nil {
-			return nil, err
-		}
-		ccResp := internal.ParseCCResponseDirectives(resp.Header)
-		if r.ce.CanStoreResponse(resp, ccReq, ccResp) {
-			_ = r.rs.StoreResponse(resp, cacheKey, start, end)
-		}
-		internal.CacheStatusMiss.ApplyTo(resp.Header)
-		return resp, nil
+	resp, err := r.transport.RoundTrip(req)
+	if err != nil {
+		return nil, err
 	}
+	if isNonErrorStatus(resp.StatusCode) {
+		r.ci.InvalidateCache(req.URL, resp.Header, cacheKey)
+	}
+	internal.CacheStatusBypass.ApplyTo(resp.Header)
+	return resp, nil
+}
 
-	// 3. Cached entry found and Vary matches
+func (r *roundTripper) handleCacheMiss(req *http.Request, cacheKey string) (*http.Response, error) {
+	ccReq := internal.ParseCCRequestDirectives(req.Header)
+	if ccReq.OnlyIfCached() {
+		return make504Response(req)
+	}
+	var start, end time.Time
+	resp, start, end, err := r.roundTripTimed(req)
+	if err != nil {
+		return nil, err
+	}
+	ccResp := internal.ParseCCResponseDirectives(resp.Header)
+	if r.ce.CanStoreResponse(resp, ccReq, ccResp) {
+		_ = r.rs.StoreResponse(resp, cacheKey, start, end)
+	}
+	internal.CacheStatusMiss.ApplyTo(resp.Header)
+	return resp, nil
+}
+
+func (r *roundTripper) handleCacheHit(
+	req *http.Request,
+	storedEntry *internal.Entry,
+	cacheKey string,
+) (*http.Response, error) {
 	ccReq := internal.ParseCCRequestDirectives(req.Header)
 	ccResp := internal.ParseCCResponseDirectives(storedEntry.Response.Header)
 	freshness := r.fc.CalculateFreshness(storedEntry, ccReq, ccResp)
@@ -204,52 +240,17 @@ func (r *roundTripper) RoundTrip(req *http.Request) (resp *http.Response, err er
 		return storedEntry.Response, nil
 	}
 
-	// 3.1 Handle stale-while-revalidate
-	swr, swrValid := ccResp.StaleWhileRevalidate()
-	if freshness.IsStale && swrValid {
+	if swr, swrValid := ccResp.StaleWhileRevalidate(); freshness.IsStale && swrValid {
 		age := freshness.Age.Value + r.clock.Since(freshness.Age.Timestamp)
 		staleFor := age - freshness.UsefulLife
 		if staleFor >= 0 && staleFor < swr {
-			req = req.Clone(req.Context())
-			req = withConditionalHeaders(req, storedEntry.Response.Header)
-			go func() {
-				sl := r.logger.With(
-					slog.String("method", req.Method),
-					slog.String("url", req.URL.String()),
-					slog.String("cacheKey", cacheKey),
-				)
-
-				ctx, cancel := context.WithTimeout(req.Context(), r.swrTimeout)
-				defer cancel()
-				req = req.WithContext(ctx)
-
-				done := make(chan struct{})
-				var swrErr error
-				go func() {
-					defer close(done)
-					sl.Debug("SWR background revalidation started")
-					swrErr = r.backgroundRevalidate(req, storedEntry, cacheKey, freshness, ccReq)
-				}()
-				select {
-				case <-ctx.Done():
-					sl.Debug("SWR background revalidation timeout")
-				case <-done:
-					if swrErr != nil {
-						sl.Error("SWR background revalidation error", slog.Any("error", swrErr))
-					} else {
-						sl.Debug("SWR background revalidation done")
-					}
-				}
-			}()
-			internal.CacheStatusStale.ApplyTo(storedEntry.Response.Header)
-			return storedEntry.Response, nil
+			return r.handleStaleWhileRevalidate(req, storedEntry, cacheKey, freshness, ccReq)
 		}
 	}
 
-	// 4. Prepare conditional request for revalidation
 	req = withConditionalHeaders(req, storedEntry.Response.Header)
 	var start, end time.Time
-	resp, start, end, err = r.roundTripTimed(req)
+	resp, start, end, err := r.roundTripTimed(req)
 	ctx := internal.RevalidationContext{
 		CacheKey:  cacheKey,
 		Start:     start,
@@ -259,6 +260,61 @@ func (r *roundTripper) RoundTrip(req *http.Request) (resp *http.Response, err er
 		Freshness: freshness,
 	}
 	return r.vh.HandleValidationResponse(ctx, req, resp, err)
+}
+
+func (r *roundTripper) handleStaleWhileRevalidate(
+	req *http.Request,
+	storedEntry *internal.Entry,
+	cacheKey string,
+	freshness *internal.Freshness,
+	ccReq internal.CCRequestDirectives,
+) (*http.Response, error) {
+	req2 := req.Clone(req.Context())
+	req2 = withConditionalHeaders(req2, storedEntry.Response.Header)
+	go r.performBackgroundRevalidation(req2, storedEntry, cacheKey, freshness, ccReq)
+	internal.CacheStatusStale.ApplyTo(storedEntry.Response.Header)
+	return storedEntry.Response, nil
+}
+
+func (r *roundTripper) performBackgroundRevalidation(
+	req *http.Request,
+	storedEntry *internal.Entry,
+	cacheKey string,
+	freshness *internal.Freshness,
+	ccReq internal.CCRequestDirectives,
+) {
+	sl := r.logger.With(
+		slog.String("method", req.Method),
+		slog.String("url", req.URL.String()),
+		slog.String("cacheKey", cacheKey),
+	)
+
+	ctx, cancel := context.WithTimeout(req.Context(), r.swrTimeout)
+	defer cancel()
+	req = req.WithContext(ctx)
+
+	done := make(chan struct{})
+	var swrErr error
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				sl.Error("SWR background revalidation panic", slog.Any("panic", r))
+			}
+			close(done)
+		}()
+		sl.Debug("SWR background revalidation started")
+		swrErr = r.backgroundRevalidate(req, storedEntry, cacheKey, freshness, ccReq)
+	}()
+	select {
+	case <-ctx.Done():
+		sl.Debug("SWR background revalidation timeout")
+	case <-done:
+		if swrErr != nil {
+			sl.Error("SWR background revalidation error", slog.Any("error", swrErr))
+		} else {
+			sl.Debug("SWR background revalidation done")
+		}
+	}
 }
 
 func (r *roundTripper) backgroundRevalidate(
