@@ -6,13 +6,24 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"text/tabwriter"
 	"time"
 
 	"github.com/bartventer/httpcache"
+	"github.com/bartventer/httpcache/store"
 )
+
+var cache *DummyCache
+
+func init() {
+	cache = NewDummyCache()
+	store.Register("dummy", store.DriverFunc(func(u *url.URL) (store.Cache, error) {
+		return cache, nil
+	}))
+}
 
 func main() {
 	etag := "W/\"1234567890\""
@@ -30,9 +41,9 @@ func main() {
 	defer ts.Close()
 
 	url := ts.URL
-	cache := NewDummyCache()
+	dsn := "dummy://"
 	client := &http.Client{
-		Transport: httpcache.NewTransport(cache),
+		Transport: httpcache.NewTransport(dsn),
 	}
 
 	fmt.Println(strings.Repeat("=", 60))
