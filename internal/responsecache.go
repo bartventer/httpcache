@@ -3,13 +3,11 @@ package internal
 import (
 	"fmt"
 	"net/http"
+
+	"github.com/bartventer/httpcache/store"
 )
 
-type Cache interface {
-	Get(key string) ([]byte, error)
-	Set(key string, entry []byte) error
-	Delete(key string) error
-}
+type Cache = store.Cache
 
 type ResponseCache interface {
 	Get(key string, req *http.Request) (*Entry, error)
