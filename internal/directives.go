@@ -138,7 +138,7 @@ func (s RawCSVSeq) Value() (seq iter.Seq[string], valid bool) {
 // cache directives (as specified in 9111, §5.2.1 and 5.2.2). The
 // iterator yields the key (token) and value (argument) of each directive.
 //
-// It guarentees that the key is always non-empty, and if a value is not
+// It guarantees that the key is always non-empty, and if a value is not
 // present, it yields an empty string as the value.
 func directivesSeq2(s string) iter.Seq2[string, string] {
 	return func(yield func(string, string) bool) {
