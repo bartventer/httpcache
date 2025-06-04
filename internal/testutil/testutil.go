@@ -10,22 +10,38 @@ import (
 
 var ErrSample = errors.New("an error")
 
-func AssertEqual[T cmp.Ordered](t *testing.T, expected, actual T, msgAndArgs ...interface{}) bool {
+func assert(t *testing.T, condition bool, msgAndArgs ...interface{}) bool {
 	t.Helper()
-	if cmp.Compare(expected, actual) != 0 {
-		t.Errorf("assertEqual failed: expected %v, got %v, %s", expected, actual, msgAndArgs)
+	if !condition {
+		t.Errorf("assert failed: %s", msgAndArgs)
 		return false
 	}
 	return true
 }
 
-func AssertTrue(t *testing.T, condition bool, msgAndArgs ...interface{}) bool {
+func require(t *testing.T, condition bool, msgAndArgs ...interface{}) {
 	t.Helper()
 	if !condition {
-		t.Errorf("assertTrue failed: condition is false, %s", msgAndArgs)
-		return false
+		t.Fatalf("require failed: %s", msgAndArgs)
 	}
-	return true
+}
+
+func AssertEqual[T cmp.Ordered](t *testing.T, expected, actual T, msgAndArgs ...interface{}) bool {
+	t.Helper()
+	got := cmp.Compare(expected, actual)
+	return assert(
+		t,
+		got == 0,
+		"assertEqual failed: expected %v, got %v, %s",
+		expected,
+		actual,
+		msgAndArgs,
+	)
+}
+
+func AssertTrue(t *testing.T, condition bool, msgAndArgs ...interface{}) bool {
+	t.Helper()
+	return assert(t, condition, "assertTrue failed: condition is false, %s", msgAndArgs)
 }
 
 func hasError(t *testing.T, err error) bool {
@@ -35,30 +51,43 @@ func hasError(t *testing.T, err error) bool {
 
 func RequireError(t *testing.T, err error, msgAndArgs ...interface{}) {
 	t.Helper()
-	if !hasError(t, err) {
-		t.Fatalf("expected error, got none, %s", msgAndArgs)
-	}
+	got := hasError(t, err)
+	require(t, got, "requireError failed: expected error, got nil, %s", msgAndArgs)
 }
 
 func RequireNoError(t *testing.T, err error, msgAndArgs ...interface{}) {
 	t.Helper()
-	if hasError(t, err) {
-		t.Fatalf("expected no error, got: %v, %s", err, msgAndArgs)
-	}
+	got := hasError(t, err)
+	require(t, !got, "requireNoError failed: expected no error, got %v, %s", err, msgAndArgs)
 }
 
 func RequireErrorIs(t *testing.T, err error, target error, msgAndArgs ...interface{}) {
 	t.Helper()
-	if !errors.Is(err, target) {
-		t.Fatalf("expected error %v, got %v, %s", target, err, msgAndArgs)
-	}
+	got := errors.Is(err, target)
+	require(t, got, "requireErrorIs failed: expected error %v, got %v, %s", target, err, msgAndArgs)
+}
+
+func RequireErrorAs(t *testing.T, err error, target interface{}, msgAndArgs ...interface{}) {
+	t.Helper()
+	got := errors.As(err, target)
+	require(
+		t,
+		got,
+		"requireErrorAs failed: expected error to be of type %T, got %v, %s",
+		target,
+		err,
+		msgAndArgs,
+	)
 }
 
 func RequireTrue(t *testing.T, condition bool, msgAndArgs ...interface{}) {
 	t.Helper()
-	if !condition {
-		t.Fatalf("expected condition to be true, got false, %s", msgAndArgs)
-	}
+	require(
+		t,
+		condition,
+		"requireTrue failed: expected condition to be true, got false, %s",
+		msgAndArgs,
+	)
 }
 
 // From github.com/stretchr/testify/assert
@@ -84,25 +113,49 @@ func isNil(object interface{}) bool {
 
 func AssertNil(t *testing.T, object interface{}, msgAndArgs ...interface{}) bool {
 	t.Helper()
-	if !isNil(object) {
-		t.Errorf("assertNil failed: expected nil, got %v, %s", object, msgAndArgs)
-		return false
-	}
-	return true
+	got := isNil(object)
+	return assert(
+		t,
+		got,
+		"assertNil failed: expected nil, got %v, %s",
+		object,
+		msgAndArgs,
+	)
 }
 
 func AssertNotNil(t *testing.T, object interface{}, msgAndArgs ...interface{}) bool {
 	t.Helper()
-	if isNil(object) {
-		t.Errorf("assertNotNil failed: expected not nil, got nil, %s", msgAndArgs)
-		return false
-	}
-	return true
+	got := !isNil(object)
+	return assert(
+		t,
+		got,
+		"assertNotNil failed: expected not nil, got nil, %s",
+		msgAndArgs,
+	)
 }
 
 func RequireNotNil(t *testing.T, object interface{}, msgAndArgs ...interface{}) {
 	t.Helper()
-	if isNil(object) {
-		t.Fatalf("expected not nil, got nil, %s", msgAndArgs)
-	}
+	got := isNil(object)
+	require(
+		t,
+		!got,
+		"requireNotNil failed: expected not nil, got nil, %s",
+		msgAndArgs,
+	)
+}
+
+func RequirePanics(t *testing.T, f func(), msgAndArgs ...interface{}) bool {
+	t.Helper()
+	defer func() {
+		got := recover()
+		require(
+			t,
+			got != nil,
+			"requirePanics failed: expected panic, got none, %s",
+			msgAndArgs,
+		)
+	}()
+	f()
+	return true
 }
