@@ -13,10 +13,11 @@
 
 - **Plug-and-Play**: Drop-in replacement for [`http.RoundTripper`](https://pkg.go.dev/net/http#RoundTripper) with no additional configuration required.
 - **RFC 9111 Compliance**: Handles validation, expiration, and revalidation.
-- **Advanced directives**: Supports [`stale-while-revalidate`](https://www.rfc-editor.org/rfc/rfc5861), [`stale-if-error`](https://www.rfc-editor.org/rfc/rfc5861), and more.
-- **Custom cache backends**: Bring your own cache implementation
+- **Cache Control**: Supports all relevant HTTP cache control directives, as well as extensions like [`stale-while-revalidate`](https://www.rfc-editor.org/rfc/rfc5861#section-3) and [`stale-if-error`](https://www.rfc-editor.org/rfc/rfc5861#section-4).
+- **Cache Backends**: Built-in support for file system and memory caches, with the ability to implement custom backends.
 - **Extensible**: Options for logging, transport and timeouts.
-- **Debuggable**: Adds a cache status header to every response
+- **Debuggable**: Adds a cache status header to every response.
+- **Zero Dependencies**: No external dependencies, pure Go implementation.
 
 ![Made with VHS](https://vhs.charm.sh/vhs-3WOBtYTZzzXggFGYRudHTV.gif)
 
@@ -28,38 +29,44 @@
 package main
 
 import (
-    "fmt"
-    "net/http"
+	"log/slog"
+	"net/http"
+	"time"
 
-    "github.com/bartventer/httpcache"
+	"github.com/bartventer/httpcache"
+    // Register the file system cache backend
+	_ "github.com/bartventer/httpcache/store/fscache" 
 )
 
 func main() {
-    myCache := /* your implementation of httpcache.Cache */
-    client := &http.Client{
-        Transport: httpcache.NewTransport(myCache)
-
-    resp, err := client.Get("https://example.com/resource")
-    if err != nil {
-        fmt.Println("Error:", err)
-        return
-    }
-    defer resp.Body.Close()
-    fmt.Println(resp.Header.Get(httpcache.CacheStatusHeader)) // e.g. "HIT", "MISS"
+    // Example DSN for the file system cache backend
+	dsn := "fscache://?appname=myapp" 
+	client := &http.Client{
+		Transport: httpcache.NewTransport(
+			dsn,
+			httpcache.WithSWRTimeout(10*time.Second),
+			httpcache.WithLogger(slog.Default()),
+		),
+	}
+    // ... Use the client as usual
 }
 ```
 
-## Cache Interface
+> To use a cache backend, specify it with a DSN string (e.g., `"fscache://"` or `"memcache://"`).  **You must import the backend package (often with a blank import) to register it.**
 
-The `httpcache.Cache` interface defines the methods required for a cache implementation:
 
-```go
-type Cache interface {
-    Get(key string) ([]byte, error)
-    Set(key string, value []byte) error
-    Delete(key string) error
-}
-```
+## Cache Backends
+
+| Backend                                                                         | DSN Example                | Description                                          |
+| ------------------------------------------------------------------------------- | -------------------------- | ---------------------------------------------------- |
+| [`fscache`](https://pkg.go.dev/github.com/bartventer/httpcache/store/fscache)   | `fscache://?appname=myapp` | Built-in file system cache, stores responses on disk |
+| [`memcache`](https://pkg.go.dev/github.com/bartventer/httpcache/store/memcache) | `memcache://`              | Built-in memory cache, stores responses in memory    |
+
+Consult the documentation for each backend for specific configuration options and usage details.
+
+### Custom Cache Backends
+
+To implement a custom cache backend, create a type that satisfies the `httpcache.Cache` interface. This interface requires methods for storing, retrieving, and deleting cached responses. You can then register your backend by importing it in your application. See the [fscache](https://pkg.go.dev/github.com/bartventer/httpcache/store/fscache) for an example implementation.
 
 ## Options
 
