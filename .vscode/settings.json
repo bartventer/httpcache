@@ -4,6 +4,7 @@
         "-v",
     ],
     "go.testTimeout": "5m",
+    "go.buildTags": "httpcache_acceptance_benchmarks",
     "gopls": {
         "ui.semanticTokens": false
     },
