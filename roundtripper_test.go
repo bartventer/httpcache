@@ -627,12 +627,12 @@ func TestRoundTripper_SWR_Timeout(t *testing.T) {
 	}
 }
 
-func TestNew(t *testing.T) {
+func Test_newTransport(t *testing.T) {
 	mockTransport := &internal.MockRoundTripper{}
 	l := slog.New(slog.DiscardHandler)
 	swrTimeout := 100 * time.Millisecond
 	mockCache := &internal.MockCache{}
-	rt := NewTransport(mockCache, WithTransport(mockTransport),
+	rt := newTransport(mockCache, WithTransport(mockTransport),
 		WithLogger(l),
 		WithSWRTimeout(swrTimeout),
 	)
@@ -642,14 +642,14 @@ func TestNew(t *testing.T) {
 	testutil.AssertEqual(t, swrTimeout, rt.(*roundTripper).swrTimeout)
 }
 
-func TestNewTransport_Panic(t *testing.T) {
+func Test_newTransport_Panic(t *testing.T) {
 	panicked := false
 	defer func() {
 		if r := recover(); r != nil {
 			panicked = true
 		}
 	}()
-	NewTransport(
+	newTransport(
 		nil,
 		WithTransport(http.DefaultTransport),
 		WithLogger(slog.New(slog.DiscardHandler)),

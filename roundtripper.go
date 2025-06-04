@@ -1,17 +1,34 @@
 // Package httpcache provides an implementation of http.RoundTripper that adds
 // transparent HTTP response caching according to RFC 9111 (HTTP Caching).
 //
-// The primary entry point is [NewTransport], which returns an [http.RoundTripper] that can
-// be used with [http.Client] to cache HTTP responses in a user-provided Cache.
-//
-// The package supports standard HTTP caching semantics, including validation,
-// freshness calculation, cache revalidation, and support for directives such as
+// The main entry point is [NewTransport], which returns an [http.RoundTripper] for use with [http.Client].
+// httpcache supports the required standard HTTP caching directives, as well as extension directives such as
 // stale-while-revalidate and stale-if-error.
 //
 // Example usage:
 //
-//	client := &http.Client{
-//		Transport: httpcache.NewTransport(myCache, httpcache.WithLogger(myLogger)),
+//	package main
+//
+//	import (
+//		"log/slog"
+//		"net/http"
+//		"time"
+//
+//		"github.com/bartventer/httpcache"
+//
+//		// Register a cache backend by importing the package
+//		_ "github.com/bartventer/httpcache/store/fscache"
+//	)
+//
+//	func main() {
+//		dsn := "fscache://?appname=myapp" // // Example DSN for the file system cache backend
+//		client := &http.Client{
+//			Transport: httpcache.NewTransport(
+//				dsn,
+//				httpcache.WithSWRTimeout(10*time.Second),
+//				httpcache.WithLogger(slog.Default()),
+//			),
+//		}
 //	}
 package httpcache
 
@@ -25,6 +42,7 @@ import (
 	"time"
 
 	"github.com/bartventer/httpcache/internal"
+	"github.com/bartventer/httpcache/store"
 )
 
 const CacheStatusHeader = internal.CacheStatusHeader
@@ -114,30 +132,24 @@ const DefaultSWRTimeout = 5 * time.Second // Default timeout for Stale-While-Rev
 //	}()
 var ErrNilCache = errors.New("httpcache: cache cannot be nil")
 
-// Functional options allow customization of the behavior of the returned [http.RoundTripper].
+// NewTransport returns an http.RoundTripper that caches HTTP responses using
+// the specified cache backend.
+//
+// The backend is selected via a DSN (e.g., "memcache://", "fscache://").
+// Panics if the cache cannot be opened or is nil. A blank import is required
+// to register the cache backend.
+//
+// To configure the transport, you can use functional options such as
+// [WithTransport], [WithSWRTimeout], and [WithLogger].
+func NewTransport(dsn string, options ...Option) http.RoundTripper {
+	cache, err := store.Open(dsn)
+	if err != nil {
+		panic(fmt.Errorf("httpcache: failed to open cache: %w", err))
+	}
+	return newTransport(cache, options...)
+}
 
-// NewTransport creates a new [http.RoundTripper] that caches HTTP responses.
-// It requires a non-nil [Cache] implementation to store and retrieve cached responses.
-// It also accepts functional options to configure the transport, SWR timeout,
-// and logger. If the cache is nil, it panics with [ErrNilCache].
-//
-// # Functional options
-//
-// [WithTransport] sets the underlying HTTP transport for making requests. For example:
-//
-//	transport := httpcache.NewTransport(myCache, httpcache.WithTransport(http.DefaultTransport))
-//
-// [WithLogger] sets a logger for debug output. For example:
-//
-//	logger := slog.New(slog.NewJSONHandler(os.Stdout))
-//	transport := httpcache.NewTransport(myCache, httpcache.WithLogger(logger))
-//
-// [WithSWRTimeout] sets the timeout for Stale-While-Revalidate requests. For example:
-//
-//	transport := httpcache.NewTransport(myCache, httpcache.WithSWRTimeout(10*time.Second))
-//
-// These options can be combined to tailor the behavior of the transport to specific needs.
-func NewTransport(cache Cache, options ...Option) http.RoundTripper {
+func newTransport(cache store.Cache, options ...Option) http.RoundTripper {
 	if cache == nil {
 		panic(ErrNilCache)
 	}
