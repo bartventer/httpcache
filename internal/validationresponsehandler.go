@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-const CacheStatusHeader = "X-Go-HTTP-Cache-Status"
+const CacheStatusHeader = "X-Httpcache-Status"
 
 type CacheStatus string
 
