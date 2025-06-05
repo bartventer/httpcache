@@ -13,7 +13,7 @@
 ## Features
 
 - **Plug-and-Play**: Drop-in replacement for [`http.RoundTripper`](https://pkg.go.dev/net/http#RoundTripper) with no additional configuration required.
-- **RFC 9111 Compliance**: Handles validation, expiration, and revalidation (see [Compliance Matrix](#rfc-9111-compliance-matrix) for details).
+- **RFC 9111 Compliance**: Handles validation, expiration, and revalidation. [View full compliance details](#rfc-9111-compliance-matrix).
 - **Cache Control**: Supports all required HTTP cache control directives, as well as extensions like [`stale-while-revalidate`](https://www.rfc-editor.org/rfc/rfc5861#section-3) and [`stale-if-error`](https://www.rfc-editor.org/rfc/rfc5861#section-4).
 - **Cache Backends**: Built-in support for file system and memory caches, with the ability to implement custom backends.
 - **Extensible**: Options for logging, transport and timeouts.
