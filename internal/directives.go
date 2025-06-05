@@ -10,42 +10,6 @@ import (
 	"time"
 )
 
-/*
-Cache-Control Directives Supported
-
-Freshness Directives (affect staleness calculation):
-- max-age (request/response)
-- expires (response)
-- min-fresh (request)
-- max-stale (request)
-- s-maxage (ignored in private caches)
-
-Policy Directives (affect use/revalidation):
-- no-cache (request/response)
-- must-revalidate (response)
-- only-if-cached (request)
-
-Storage Control:
-- no-store (request/response)
-- public (response)
-- no-transform (request/response)
-- must-understand (response)
-- must-revalidate (response)
-
-Ignored Directives (not applicable to private caches):
-- proxy-revalidate (response)
-- private (response)
-
-Staleness Tolerance Extensions (allow use of stale responses under certain conditions):
-- stale-while-revalidate (response): may serve stale while background revalidation for N seconds beyond freshness lifetime
-- stale-if-error (response): may serve stale if origin returns error (e.g., 5xx) for N seconds beyond freshness lifetime
-
-Design Note:
-- Freshness calculation is based strictly on age/lifetime and freshness directives.
-- Policy directives (e.g., no-cache, must-revalidate, stale-while-revalidate, stale-if-error) are enforced outside of freshness calculation.
-- This separation aligns with RFC 9111 and RFC 5861 recommendations.
-*/
-
 // RawTime is a string that represents a time in HTTP date format.
 type RawTime string
 
@@ -180,7 +144,11 @@ func getDurationDirective(d map[string]string, token string) (dur time.Duration,
 }
 
 // CCRequestDirectives is a map of request directives from the Cache-Control
-// header field. The keys are the directive names and the values are the arguments.
+// header field as defined in RFC 9111, §5.2.1. The keys are the directive tokens,
+// and the values are the arguments (if any) as strings.
+//
+// This implementation does not perform any transformations on the request,
+// hence we ignore the "no-transform" directive.
 type CCRequestDirectives map[string]string
 
 func ParseCCRequestDirectives(header http.Header) CCRequestDirectives {
@@ -192,13 +160,11 @@ func ParseCCRequestDirectives(header http.Header) CCRequestDirectives {
 }
 
 // MaxAge parses the "max-age" request directive as defined in RFC 9111, §5.2.1.1.
-// It indicates the client's maximum acceptable age for a cached response.
 func (d CCRequestDirectives) MaxAge() (dur time.Duration, valid bool) {
 	return getDurationDirective(d, "max-age")
 }
 
 // MaxStale parses the "max-stale" request directive as defined in RFC 9111, §5.2.1.2.
-// Indicates the client's maximum acceptable staleness of a cached response.
 func (d CCRequestDirectives) MaxStale() (dur RawDeltaSeconds, valid bool) {
 	if v, ok := d["max-stale"]; ok {
 		return RawDeltaSeconds(v), true
@@ -207,51 +173,41 @@ func (d CCRequestDirectives) MaxStale() (dur RawDeltaSeconds, valid bool) {
 }
 
 // MinFresh parses the "min-fresh" request directive as defined in RFC 9111, §5.2.1.3.
-// It indicates the minimum time a cached response must remain fresh before it can be served.
 func (d CCRequestDirectives) MinFresh() (dur time.Duration, valid bool) {
 	return getDurationDirective(d, "min-fresh")
 }
 
 // NoCache reports the presence of the "no-cache" request directive as defined in RFC 9111, §5.2.1.4.
-// It indicates that the request must be validated with the origin server before being served from cache.
 func (d CCRequestDirectives) NoCache() bool {
 	return hasToken(d, "no-cache")
 }
 
 // NoStore reports the presence of the "no-store" request directive as defined in RFC 9111, §5.2.1.5.
-// It indicates that the request must not be stored by any cache.
 func (d CCRequestDirectives) NoStore() bool {
 	return hasToken(d, "no-store")
 }
 
-// It indicates that the client does not want any transformation of the response content,.
-func (d CCRequestDirectives) NoTransform() bool {
-	return hasToken(d, "no-transform")
-}
-
 // OnlyIfCached reports the presence of the "only-if-cached" request directive as defined in RFC 9111, §5.2.1.7.
-// It indicates that the client only wants a response from the cache and does not want to contact the origin server.
-// If the response is not in the cache, the server should return a 504 (Gateway Timeout) status code.
 func (d CCRequestDirectives) OnlyIfCached() bool {
 	return hasToken(d, "only-if-cached")
 }
 
 // StaleIfError parses the "stale-if-error" request directive (extension) as defined in RFC 5861, §4.
-// It indicates that the client is willing to accept a stale response if the origin server is unavailable or returns an error.
 func (d CCRequestDirectives) StaleIfError() (dur time.Duration, valid bool) {
 	return getDurationDirective(d, "stale-if-error")
 }
 
 // CCResponseDirectives is a map of response directives from the Cache-Control
-// header field. The keys are the directive names and the values are the arguments.
+// header field. The keys are the directive tokens, and the values are the arguments (if any)
+// as strings.
 //
 // The following directives per RFC 9111, §5.2.2 are not applicable to private caches:
+//   - "private" (§5.2.2.7)
 //   - "proxy-revalidate" (§5.2.2.8)
-//   - "public" (§5.2.2.9)
 //   - "s-maxage" (§5.2.2.10)
 //
-// Additionally, the following extension directives are supported:
-//   - "stale-if-error" (RFC 5861, §4)
+// This implementation does not perform any transformations on the request,
+// hence we ignore the "no-transform" directive.
 type CCResponseDirectives map[string]string
 
 func ParseCCResponseDirectives(header http.Header) CCResponseDirectives {
@@ -263,13 +219,11 @@ func ParseCCResponseDirectives(header http.Header) CCResponseDirectives {
 }
 
 // MaxAge parses the "max-age" response directive as defined in RFC 9111, §5.2.2.1.
-// It indicates the maximum time a response can be cached before it must be revalidated.
 func (d CCResponseDirectives) MaxAge() (dur time.Duration, valid bool) {
 	return getDurationDirective(d, "max-age")
 }
 
 // MaxAgePresent reports the presence of the "max-age" response directive as defined in RFC 9111, §5.2.2.1.
-// It indicates that the response has a valid "max-age" directive, regardless of its value.
 func (d CCResponseDirectives) MaxAgePresent() bool {
 	return hasToken(d, "max-age")
 }
@@ -285,7 +239,6 @@ func (d CCResponseDirectives) MustUnderstand() bool {
 }
 
 // NoCache parses the "no-cache" response directive as defined in RFC 9111, §5.2.2.4.
-// If the directive is present, it returns the raw comma-separated values.
 func (d CCResponseDirectives) NoCache() (fields RawCSVSeq, present bool) {
 	v, ok := d["no-cache"]
 	if !ok {
@@ -299,24 +252,17 @@ func (d CCResponseDirectives) NoStore() bool {
 	return hasToken(d, "no-store")
 }
 
-// NoTransform reports the presence of the "no-transform" response directive as defined in RFC 9111, §5.2.2.6.
-func (d CCResponseDirectives) NoTransform() bool {
-	return hasToken(d, "no-transform")
-}
-
 // Public reports the presence of the "public" response directive as defined in RFC 9111, §5.2.2.9.
 func (d CCResponseDirectives) Public() bool {
 	return hasToken(d, "public")
 }
 
 // StaleIfError parses the "stale-if-error" response directive (extension) as defined in RFC 5861, §4.
-// It indicates that a cache can serve a stale response if the origin server is unavailable or returns an error.
 func (d CCResponseDirectives) StaleIfError() (dur time.Duration, valid bool) {
 	return getDurationDirective(d, "stale-if-error")
 }
 
 // StaleWhileRevalidate parses the "stale-while-revalidate" response directive (extension) as defined in RFC 5861, §3.
-// It indicates that a cache can serve a stale response while it revalidates the response in the background.
 func (d CCResponseDirectives) StaleWhileRevalidate() (dur time.Duration, valid bool) {
 	return getDurationDirective(d, "stale-while-revalidate")
 }

@@ -25,7 +25,6 @@ func NewResponseCache(cache Cache) *responseCache {
 
 var _ ResponseCache = (*responseCache)(nil)
 
-// Get retrieves a cached response entry by its key.
 func (r *responseCache) Get(key string, req *http.Request) (*Entry, error) {
 	data, err := r.cache.Get(key)
 	if err != nil {
@@ -38,7 +37,6 @@ func (r *responseCache) Get(key string, req *http.Request) (*Entry, error) {
 	return entry, nil
 }
 
-// Set stores a response entry in the cache with the given key.
 func (r *responseCache) Set(key string, entry *Entry) error {
 	data, err := entry.MarshalBinary()
 	if err != nil {
@@ -47,7 +45,6 @@ func (r *responseCache) Set(key string, entry *Entry) error {
 	return r.cache.Set(key, data)
 }
 
-// Delete removes a cached entry by its key.
 func (r *responseCache) Delete(key string) error {
 	return r.cache.Delete(key)
 }

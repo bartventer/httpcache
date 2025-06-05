@@ -13,18 +13,18 @@ import (
 func TestParseCCRequestDirectives_AllDirectives(t *testing.T) {
 	header := http.Header{
 		"Cache-Control": []string{
-			`no-cache="foo,bar", max-age=1800, min-fresh=60, max-stale=120, no-store, no-transform, only-if-cached, stale-if-error=90`,
+			`no-cache="foo,bar", max-age=1800, min-fresh=60, max-stale=120, no-store, only-if-cached, stale-if-error=90`,
 		},
 	}
 	got := ParseCCRequestDirectives(header)
 
 	want := CCRequestDirectives{
-		"no-cache":       `"foo,bar"`,
-		"max-age":        "1800",
-		"min-fresh":      "60",
-		"max-stale":      "120",
-		"no-store":       "",
-		"no-transform":   "",
+		"no-cache":  `"foo,bar"`,
+		"max-age":   "1800",
+		"min-fresh": "60",
+		"max-stale": "120",
+		"no-store":  "",
+		// "no-transform":   "", // no impact on this implementation
 		"only-if-cached": "",
 		"stale-if-error": "90",
 	}
@@ -58,10 +58,6 @@ func TestParseCCRequestDirectives_AllDirectives(t *testing.T) {
 		testutil.AssertTrue(t, got.NoStore())
 	})
 
-	t.Run("NoTransform", func(t *testing.T) {
-		testutil.AssertTrue(t, got.NoTransform())
-	})
-
 	t.Run("OnlyIfCached", func(t *testing.T) {
 		testutil.AssertTrue(t, got.OnlyIfCached())
 	})
@@ -88,18 +84,18 @@ func TestParseCCRequestDirectives_AllDirectives(t *testing.T) {
 func TestParseCCResponseDirectives_AllDirectives(t *testing.T) {
 	header := http.Header{
 		"Cache-Control": []string{
-			`no-cache="foo,bar", max-age=3600, must-revalidate, must-understand, no-store, no-transform, public, stale-if-error=120, stale-while-revalidate=60`,
+			`no-cache="foo,bar", max-age=3600, must-revalidate, must-understand, no-store, public, stale-if-error=120, stale-while-revalidate=60`,
 		},
 	}
 	got := ParseCCResponseDirectives(header)
 
 	want := CCResponseDirectives{
-		"no-cache":               `"foo,bar"`,
-		"max-age":                "3600",
-		"must-revalidate":        "",
-		"must-understand":        "",
-		"no-store":               "",
-		"no-transform":           "",
+		"no-cache":        `"foo,bar"`,
+		"max-age":         "3600",
+		"must-revalidate": "",
+		"must-understand": "",
+		"no-store":        "",
+		// "no-transform":           "", // no impact on this implementation
 		"public":                 "",
 		"stale-if-error":         "120",
 		"stale-while-revalidate": "60",
@@ -124,10 +120,6 @@ func TestParseCCResponseDirectives_AllDirectives(t *testing.T) {
 
 	t.Run("NoStore", func(t *testing.T) {
 		testutil.AssertTrue(t, got.NoStore())
-	})
-
-	t.Run("NoTransform", func(t *testing.T) {
-		testutil.AssertTrue(t, got.NoTransform())
 	})
 
 	t.Run("Public", func(t *testing.T) {

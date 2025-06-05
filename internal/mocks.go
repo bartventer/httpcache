@@ -127,7 +127,6 @@ type MockResponseStorer struct {
 	StoreResponseFunc func(resp *http.Response, key string, reqTime, respTime time.Time) error
 }
 
-// StoreResponse implements ResponseStorer.
 func (m *MockResponseStorer) StoreResponse(
 	resp *http.Response,
 	key string,
