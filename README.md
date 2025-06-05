@@ -7,8 +7,7 @@
 
 **httpcache** is a Go package that provides a standards-compliant [http.RoundTripper](https://pkg.go.dev/net/http#RoundTripper) for transparent HTTP response caching, following [RFC 9111 (HTTP Caching)](https://www.rfc-editor.org/rfc/rfc9111).
 
-!!! note
-	This package is intended for use as a **private (client-side) cache**. It is **not** a shared or proxy cache. It is designed to be used with an HTTP client to cache responses from origin servers, improving performance and reducing load on those servers.
+> **Note:** This package is intended for use as a **private (client-side) cache**. It is **not** a shared or proxy cache. It is designed to be used with an HTTP client to cache responses from origin servers, improving performance and reducing load on those servers.
 
 ## Features
 
@@ -63,8 +62,7 @@ func main() {
 }
 ```
 
-!!! tip
-	The DSN (Data Source Name) specifies the cache backend and its configuration. In this example, `fscache://?appname=myapp` uses the file system cache with an application name of `myapp`. You can customize the DSN based on the backend you choose.
+> **Note:** The DSN format and options depend on the cache backend you choose. Refer to the [Cache Backends](#cache-backends) section for details on available backends and their DSN formats.
 
 ## Cache Backends
 
