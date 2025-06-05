@@ -5,15 +5,16 @@
 [![Test](https://github.com/bartventer/httpcache/actions/workflows/default.yml/badge.svg)](https://github.com/bartventer/httpcache/actions/workflows/default.yml)
 [![codecov](https://codecov.io/github/bartventer/httpcache/graph/badge.svg?token=pnpoA3t4EE)](https://codecov.io/github/bartventer/httpcache)
 
-*httpcache* is a Go package that provides a standards-compliant [http.RoundTripper](https://pkg.go.dev/net/http#RoundTripper) for transparent HTTP response caching, following [RFC 9111 (HTTP Caching)](https://www.rfc-editor.org/rfc/rfc9111).
+**httpcache** is a Go package that provides a standards-compliant [http.RoundTripper](https://pkg.go.dev/net/http#RoundTripper) for transparent HTTP response caching, following [RFC 9111 (HTTP Caching)](https://www.rfc-editor.org/rfc/rfc9111).
 
-> **Note:** This package is intended for use as a **private (client-side) cache**. It is not a shared or proxy cache.
+!!! note
+	This package is intended for use as a **private (client-side) cache**. It is **not** a shared or proxy cache. It is designed to be used with an HTTP client to cache responses from origin servers, improving performance and reducing load on those servers.
 
 ## Features
 
 - **Plug-and-Play**: Drop-in replacement for [`http.RoundTripper`](https://pkg.go.dev/net/http#RoundTripper) with no additional configuration required.
-- **RFC 9111 Compliance**: Handles validation, expiration, and revalidation.
-- **Cache Control**: Supports all relevant HTTP cache control directives, as well as extensions like [`stale-while-revalidate`](https://www.rfc-editor.org/rfc/rfc5861#section-3) and [`stale-if-error`](https://www.rfc-editor.org/rfc/rfc5861#section-4).
+- **RFC 9111 Compliance**: Handles validation, expiration, and revalidation (see [Compliance Matrix](#rfc-9111-compliance-matrix) for details).
+- **Cache Control**: Supports all required HTTP cache control directives, as well as extensions like [`stale-while-revalidate`](https://www.rfc-editor.org/rfc/rfc5861#section-3) and [`stale-if-error`](https://www.rfc-editor.org/rfc/rfc5861#section-4).
 - **Cache Backends**: Built-in support for file system and memory caches, with the ability to implement custom backends.
 - **Extensible**: Options for logging, transport and timeouts.
 - **Debuggable**: Adds a cache status header to every response.
@@ -21,39 +22,49 @@
 
 ![Made with VHS](https://vhs.charm.sh/vhs-3WOBtYTZzzXggFGYRudHTV.gif)
 
-*Refer to [_examples/app](_examples/app/app.go) for the source code.*
+*Demonstration of HTTP caching in action. See [_examples/app](_examples/app/app.go) for code.*
+
+## Installation
+
+To install the package, run:
+
+```bash
+go get github.com/bartventer/httpcache
+```
 
 ## Quick Start
+
+To get started, create a new HTTP client with the `httpcache` transport, specifying a cache backend DSN. You'll need to register the desired cache backend before using it. Here's an example using the built-in file system cache:
 
 ```go
 package main
 
 import (
-	"log/slog"
-	"net/http"
-	"time"
-
+    "log/slog"
+    "net/http"
+    "time"
+    
 	"github.com/bartventer/httpcache"
     // Register the file system cache backend
-	_ "github.com/bartventer/httpcache/store/fscache" 
+    _ "github.com/bartventer/httpcache/store/fscache" 
 )
 
 func main() {
     // Example DSN for the file system cache backend
-	dsn := "fscache://?appname=myapp" 
-	client := &http.Client{
-		Transport: httpcache.NewTransport(
-			dsn,
-			httpcache.WithSWRTimeout(10*time.Second),
-			httpcache.WithLogger(slog.Default()),
-		),
-	}
+    dsn := "fscache://?appname=myapp" 
+    client := &http.Client{
+        Transport: httpcache.NewTransport(
+            dsn,
+            httpcache.WithSWRTimeout(10*time.Second),
+            httpcache.WithLogger(slog.Default()),
+    	),
+    }
     // ... Use the client as usual
 }
 ```
 
-> To use a cache backend, specify it with a DSN string (e.g., `"fscache://"` or `"memcache://"`).  **You must import the backend package (often with a blank import) to register it.**
-
+!!! tip
+	The DSN (Data Source Name) specifies the cache backend and its configuration. In this example, `fscache://?appname=myapp` uses the file system cache with an application name of `myapp`. You can customize the DSN based on the backend you choose.
 
 ## Cache Backends
 
@@ -66,37 +77,19 @@ Consult the documentation for each backend for specific configuration options an
 
 ### Custom Cache Backends
 
-To implement a custom cache backend, create a type that satisfies the `httpcache.Cache` interface. This interface requires methods for storing, retrieving, and deleting cached responses. You can then register your backend by importing it in your application. See the [fscache](https://pkg.go.dev/github.com/bartventer/httpcache/store/fscache) for an example implementation.
+To implement a custom cache backend, create a type that satisfies the [`store.Cache`](https://pkg.go.dev/github.com/bartventer/httpcache/store#Cache) interface, then register it using the [`store.Register`](https://pkg.go.dev/github.com/bartventer/httpcache/store#Register) function. Refer to the built-in backends for examples of how to implement this interface.
 
 ## Options
 
 | Option                             | Description                            | Default Value                   |
 | ---------------------------------- | -------------------------------------- | ------------------------------- |
 | `WithTransport(http.RoundTripper)` | Set the underlying transport           | `http.DefaultTransport`         |
-| `WithSWRTimeout(time.Duration)`    | Set the stale-while-revalidate timeout | `5s`                            |
+| `WithSWRTimeout(time.Duration)`    | Set the stale-while-revalidate timeout | `5 * time.Second`               |
 | `WithLogger(*slog.Logger)`         | Set a logger for debug output          | `slog.New(slog.DiscardHandler)` |
-
-## Supported Cache-Control Directives
-
-| Directive                | Request | Response | Description                                             |
-| ------------------------ | ------- | -------- | ------------------------------------------------------- |
-| `max-age`                | ✔       | ✔        | Maximum age for cache freshness                         |
-| `min-fresh`              | ✔       |          | Minimum freshness required                              |
-| `max-stale`              | ✔       |          | Accept response stale by up to N seconds                |
-| `no-cache`               | ✔       | ✔        | Must revalidate with origin before using                |
-| `no-store`               | ✔       | ✔        | Do not store in any cache                               |
-| `only-if-cached`         | ✔       |          | Only serve from cache, never contact origin             |
-| `must-revalidate`        |         | ✔        | Must revalidate once stale                              |
-| `must-understand`        |         | ✔        | Require cache to understand directive                   |
-| `public`                 |         | ✔        | Response may be cached, even if normally non-cacheable  |
-| `stale-while-revalidate` |         | ✔        | Serve stale while revalidating in background (RFC 5861) |
-| `stale-if-error`         | ✔       | ✔        | Serve stale if origin returns error (RFC 5861)          |
-
-> **Note:** The `private`, `proxy-revalidate`, and `s-maxage` directives bear no relevance in a private client-side cache and are ignored.
 
 ## Cache Status Header
 
-Every response includes a cache status header to indicate how the response was served. The header is named `X-Cache-Status` and can have the following values:
+Every response includes a cache status header to indicate how the response was served. The header is named `X-Httpcache-Status` and can have the following values:
 
 | Status        | Description             |
 | ------------- | ----------------------- |
@@ -109,13 +102,182 @@ Every response includes a cache status header to indicate how the response was s
 ### Example
 
 ```http
-X-Cache-Status: HIT
+X-Httpcache-Status: HIT
 ```
 
 ## Limitations
 
 - **Range Requests & Partial Content:**
-  This cache does **not** support HTTP range requests or partial/incomplete responses (e.g., status code 206, `Range`/`Content-Range` headers). All requests with a `Range` header are bypassed, and 206 responses are not cached. See [RFC 9111 §3.3-3.4](https://www.rfc-editor.org/rfc/rfc9111#section-3.3) for details.
+  This cache does **not** support HTTP range requests or partial/incomplete responses (e.g., status code 206, `Range`/`Content-Range` headers). All requests with a `Range` header are bypassed, and 206 responses are not cached. For example:
+
+  ```http
+  GET /example.txt HTTP/1.1
+  Host: example.com
+  Range: bytes=0-99
+  ```
+
+  The above request will bypass the cache and fetch the response directly from the origin server. See [RFC 9111 §3.3-3.4](https://www.rfc-editor.org/rfc/rfc9111#section-3.3) for details.
+
+
+## RFC 9111 Compliance Matrix
+
+[![RFC 9111](https://img.shields.io/badge/RFC%209111-Compliant-brightgreen)](https://www.rfc-editor.org/rfc/rfc9111)
+
+| Main Section                                     | Requirement | Implemented | Notes                                      |
+| ------------------------------------------------ | :---------: | :---------: | ------------------------------------------ |
+| 1. Introduction                                  |     N/A     |     N/A     | **Nothing to implement**                   |
+| 2. Overview of Cache Operation                   |     N/A     |     N/A     | **Nothing to implement**                   |
+| 3. Storing Responses in Caches                   |  Required   |      ✔️      | [Details](#storing-responses-details)      |
+| 4. Constructing Responses from Caches            |  Required   |      ✔️      | [Details](#constructing-responses-details) |
+| 5. Field Definitions                             |  Required   |      ✔️      | [Details](#field-definitions-details)      |
+| 6. Relationship to Applications and Other Caches |     N/A     |     N/A     | **Nothing to implement**                   |
+| 7. Security Considerations                       |     N/A     |     N/A     | **Nothing to implement**                   |
+| 8. IANA Considerations                           |     N/A     |     N/A     | **Nothing to implement**                   |
+| 9. References                                    |     N/A     |     N/A     | **Nothing to implement**                   |
+
+**Legend for Requirements:**
+
+| Requirement | Description                                                           |
+| ----------- | --------------------------------------------------------------------- |
+| Required    | Must be implemented for RFC compliance                                |
+| Optional    | Implementation is discretionary                                       |
+| Obsolete    | Directive is no longer relevant as per RFC 9111                       |
+| Deprecated  | Directive is deprecated as per RFC 9111, but can still be implemented |
+| N/A         | Nothing to implement or not applicable to private caches              |
+
+<details id="storing-responses-details">
+<summary><strong>§3. Storing Responses in Caches (Details)</strong></summary>
+
+| Section                                          | Requirement | Implemented | Notes                           |
+| ------------------------------------------------ | :---------: | :---------: | ------------------------------- |
+| 3.1. Storing Header and Trailer Fields           |  Required   |      ✔️      |                                 |
+| 3.2. Updating Stored Header Fields               |  Required   |      ✔️      |                                 |
+| 3.3. Storing Incomplete Responses                |  Optional   |      ❌      | See [Limitations](#limitations) |
+| 3.4. Combining Partial Content                   |  Optional   |      ❌      | ^^                              |
+| 3.5. Storing Responses to Authenticated Requests |  Required   |      ✔️      |                                 |
+
+</details>
+
+<details id="constructing-responses-details">
+<summary><strong>§4. Constructing Responses from Caches (Details)</strong></summary>
+
+| Section                                                | Requirement | Implemented | Notes                         |
+| ------------------------------------------------------ | :---------: | :---------: | ----------------------------- |
+| 4.1. Calculating Cache Keys with the Vary Header Field |  Required   |      ✔️      |                               |
+| 4.2. Freshness                                         |  Required   |      ✔️      | [Details](#freshness-details) |
+
+<details id="freshness-details">
+<summary><em>§4.2. Freshness (Subsections)</em></summary>
+
+| Section                                | Requirement | Implemented | Notes |
+| -------------------------------------- | :---------: | :---------: | ----- |
+| 4.2.1. Calculating Freshness Lifetime  |  Required   |      ✔️      |       |
+| 4.2.2. Calculating Heuristic Freshness |  Required   |      ✔️      |       |
+| 4.2.3. Calculating Age                 |  Required   |      ✔️      |       |
+| 4.2.4. Serving Stale Responses         |  Required   |      ✔️      |       |
+
+</details>
+
+| Section         | Requirement | Implemented | Notes                          |
+| --------------- | :---------: | :---------: | ------------------------------ |
+| 4.3. Validation |  Required   |      ✔️      | [Details](#validation-details) |
+
+<details id="validation-details">
+<summary><em>§4.3. Validation (Subsections)</em></summary>
+
+| Section                                            | Requirement | Implemented | Notes                                            |
+| -------------------------------------------------- | :---------: | :---------: | ------------------------------------------------ |
+| 4.3.1. Sending a Validation Request                |  Required   |      ✔️      |                                                  |
+| 4.3.2. Handling Received Validation Request        |     N/A     |     N/A     | **Not applicable to private client-side caches** |
+| 4.3.3. Handling a Validation Response              |  Required   |      ✔️      |                                                  |
+| 4.3.4. Freshening Stored Responses upon Validation |  Required   |      ✔️      |                                                  |
+| 4.3.5. Freshening Responses with HEAD              |  Required   |      ✔️      |                                                  |
+
+</details>
+
+| Section                            | Requirement | Implemented | Notes |
+| ---------------------------------- | :---------: | :---------: | ----- |
+| 4.4. Invalidating Stored Responses |  Required   |      ✔️      |       |
+
+</details>
+
+<details id="field-definitions-details">
+<summary><strong>§5. Field Definitions (Details)</strong></summary>
+
+| Section            | Requirement | Implemented | Notes                                       |
+| ------------------ | :---------: | :---------: | ------------------------------------------- |
+| 5.1. Age           |  Required   |      ✔️      |                                             |
+| 5.2. Cache-Control |  Required   |      ✔️      | [Details](#cache-control-directives)        |
+| 5.3. Expires       |  Required   |      ✔️      |                                             |
+| 5.4. Pragma        | Deprecated  |      ❌      | **Deprecated by RFC 9111; not implemented** |
+| 5.5. Warning       |  Obsolete   |      ❌      | **Obsoleted by RFC 9111; not implemented**  |
+
+<details id="cache-control-directives">
+<summary><em>§5.2. Cache-Control Directives</em></summary>
+
+| Section                   | Requirement | Implemented | Notes                                  |
+| ------------------------- | :---------: | :---------: | -------------------------------------- |
+| 5.2.1. Request Directives |  Optional   |      ✔️      | [Details](#request-directives-details) |
+
+<details id="request-directives-details">
+<summary><em>§5.2.1. Request Directives (Details)</em></summary>
+
+| Directive               | Requirement | Implemented | Notes                                                              |
+| ----------------------- | :---------: | :---------: | ------------------------------------------------------------------ |
+| 5.2.1.1. max-age        |  Optional   |      ✔️      |                                                                    |
+| 5.2.1.2. max-stale      |  Optional   |      ✔️      |                                                                    |
+| 5.2.1.3. min-fresh      |  Optional   |      ✔️      |                                                                    |
+| 5.2.1.4. no-cache       |  Optional   |      ✔️      |                                                                    |
+| 5.2.1.5. no-store       |  Optional   |      ✔️      |                                                                    |
+| 5.2.1.6. no-transform   |  Optional   |      ✔️      | **Compliant by default - implementation never transforms content** |
+| 5.2.1.7. only-if-cached |  Optional   |      ✔️      |                                                                    |
+
+</details>
+
+| Section                    | Requirement | Implemented | Notes                                   |
+| -------------------------- | :---------: | :---------: | --------------------------------------- |
+| 5.2.2. Response Directives |  Required   |      ✔️      | [Details](#response-directives-details) |
+
+<details id="response-directives-details">
+<summary><em>§5.2.2. Response Directives (Details)</em></summary>
+
+| Directive                 | Requirement | Implemented | Notes                                                              |
+| ------------------------- | :---------: | :---------: | ------------------------------------------------------------------ |
+| 5.2.2.1. max-age          |  Required   |      ✔️      |                                                                    |
+| 5.2.2.2. must-revalidate  |  Required   |      ✔️      |                                                                    |
+| 5.2.2.3. must-understand  |  Required   |      ✔️      |                                                                    |
+| 5.2.2.4. no-cache         |  Required   |      ✔️      | **Both qualified and unqualified forms supported**                 |
+| 5.2.2.5. no-store         |  Required   |      ✔️      |                                                                    |
+| 5.2.2.6. no-transform     |  Required   |      ✔️      | **Compliant by default - implementation never transforms content** |
+| 5.2.2.7. private          |     N/A     |     N/A     | **Intended for shared caches; not applicable to private caches**   |
+| 5.2.2.8. proxy-revalidate |     N/A     |     N/A     | **Intended for shared caches; not applicable to private caches**   |
+| 5.2.2.9. public           |  Optional   |      ✔️      |                                                                    |
+| 5.2.2.10. s-maxage        |     N/A     |     N/A     | **Intended for shared caches; not applicable to private caches**   |
+
+</details>
+
+| Section                     | Requirement | Implemented | Notes                                    |
+| --------------------------- | :---------: | :---------: | ---------------------------------------- |
+| 5.2.3. Extension Directives |  Optional   | *partially* | [Details](#extension-directives-details) |
+
+<details id="extension-directives-details">
+<summary><em>§5.2.3. Extension Directives (Details)</em></summary>
+
+The following registered extension directives are supported:
+
+| Directive                | Description                                                                                                                    |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| `stale-while-revalidate` | Allows serving stale responses while revalidating in background ([RFC 5861](https://www.rfc-editor.org/rfc/rfc5861#section-3)) |
+| `stale-if-error`         | Allows serving stale responses if the origin returns an error ([RFC 5861](https://www.rfc-editor.org/rfc/rfc5861#section-4))   |
+
+The following extension directives are **not recognized** and will be ignored:
+| Directive   | Description                                                                                                |
+| ----------- | ---------------------------------------------------------------------------------------------------------- |
+| `immutable` | Indicates that the response will not change over time ([RFC 8246](https://www.rfc-editor.org/rfc/rfc8246)) |
+
+</details>
+</details>
+</details>
 
 ## License
 
