@@ -266,3 +266,8 @@ func (d CCResponseDirectives) StaleIfError() (dur time.Duration, valid bool) {
 func (d CCResponseDirectives) StaleWhileRevalidate() (dur time.Duration, valid bool) {
 	return getDurationDirective(d, "stale-while-revalidate")
 }
+
+// Immutable reports the presence of the "immutable" response directive (extension) as defined in RFC 8246, §2.
+func (d CCResponseDirectives) Immutable() bool {
+	return hasToken(d, "immutable")
+}

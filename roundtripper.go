@@ -37,6 +37,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"iter"
 	"log/slog"
 	"net/http"
 	"time"
@@ -237,46 +238,43 @@ func (r *roundTripper) handleCacheMiss(req *http.Request, cacheKey string) (*htt
 
 func (r *roundTripper) handleCacheHit(
 	req *http.Request,
-	storedEntry *internal.Entry,
+	stored *internal.Entry,
 	cacheKey string,
 ) (*http.Response, error) {
 	ccReq := internal.ParseCCRequestDirectives(req.Header)
-	ccResp := internal.ParseCCResponseDirectives(storedEntry.Response.Header)
-	freshness := r.fc.CalculateFreshness(storedEntry, ccReq, ccResp)
-	ccRespNoCacheFieldsRaw, ccRespNoCachePresent := ccResp.NoCache()
-	noCacheFieldsSeq, noCacheQualified := ccRespNoCacheFieldsRaw.Value()
+	ccResp := internal.ParseCCResponseDirectives(stored.Response.Header)
+	freshness := r.fc.CalculateFreshness(stored, ccReq, ccResp)
+	respNoCacheFieldsRaw, hasRespNoCache := ccResp.NoCache()
+	respNoCacheFieldsSeq, isRespNoCacheQualified := respNoCacheFieldsRaw.Value()
+
+	// RFC 8246: If response is fresh and immutable, always serve from cache unless request has no-cache
+	if !freshness.IsStale && ccResp.Immutable() && !ccReq.NoCache() {
+		return r.serveFromCache(stored, freshness, isRespNoCacheQualified, respNoCacheFieldsSeq)
+	}
 
 	if freshness.IsStale && ccResp.MustRevalidate() {
 		goto revalidate
 	}
 
-	if ccRespNoCachePresent && !noCacheQualified {
-		// Unqualified no-cache: must revalidate before serving from cache
+	// Unqualified no-cache: must revalidate before serving from cache
+	if hasRespNoCache && !isRespNoCacheQualified {
 		goto revalidate
 	}
 
 	if ccReq.OnlyIfCached() || (!freshness.IsStale && !ccReq.NoCache()) {
-		if noCacheQualified {
-			//Qualified no-cache: may serve from cache with fields stripped
-			for field := range noCacheFieldsSeq {
-				storedEntry.Response.Header.Del(field)
-			}
-		}
-		internal.SetAgeHeader(storedEntry.Response, r.clock, freshness.Age)
-		internal.CacheStatusHit.ApplyTo(storedEntry.Response.Header)
-		return storedEntry.Response, nil
+		return r.serveFromCache(stored, freshness, isRespNoCacheQualified, respNoCacheFieldsSeq)
 	}
 
 	if swr, swrValid := ccResp.StaleWhileRevalidate(); freshness.IsStale && swrValid {
 		age := freshness.Age.Value + r.clock.Since(freshness.Age.Timestamp)
 		staleFor := age - freshness.UsefulLife
 		if staleFor >= 0 && staleFor < swr {
-			return r.handleStaleWhileRevalidate(req, storedEntry, cacheKey, freshness, ccReq)
+			return r.handleStaleWhileRevalidate(req, stored, cacheKey, freshness, ccReq)
 		}
 	}
 
 revalidate:
-	req = withConditionalHeaders(req, storedEntry.Response.Header)
+	req = withConditionalHeaders(req, stored.Response.Header)
 	var start, end time.Time
 	resp, start, end, err := r.roundTripTimed(req)
 	ctx := internal.RevalidationContext{
@@ -284,10 +282,27 @@ revalidate:
 		Start:     start,
 		End:       end,
 		CCReq:     ccReq,
-		Stored:    storedEntry,
+		Stored:    stored,
 		Freshness: freshness,
 	}
 	return r.vh.HandleValidationResponse(ctx, req, resp, err)
+}
+
+func (r *roundTripper) serveFromCache(
+	storedEntry *internal.Entry,
+	freshness *internal.Freshness,
+	noCacheQualified bool,
+	noCacheFieldsSeq iter.Seq[string],
+) (*http.Response, error) {
+	if noCacheQualified {
+		//Qualified no-cache: may serve from cache with fields stripped
+		for field := range noCacheFieldsSeq {
+			storedEntry.Response.Header.Del(field)
+		}
+	}
+	internal.SetAgeHeader(storedEntry.Response, r.clock, freshness.Age)
+	internal.CacheStatusHit.ApplyTo(storedEntry.Response.Header)
+	return storedEntry.Response, nil
 }
 
 func (r *roundTripper) handleStaleWhileRevalidate(
