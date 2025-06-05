@@ -11,7 +11,7 @@
 
 ## Features
 
-- **Plug-and-Play**: Drop-in replacement for [`http.RoundTripper`](https://pkg.go.dev/net/http#RoundTripper) with no additional configuration required.
+- **Plug-and-Play**: Drop-in replacement for [`http.DefaultTransport`](https://pkg.go.dev/net/http#DefaultTransport) with no additional configuration required.
 - **RFC 9111 Compliance**: Handles validation, expiration, and revalidation ([view full compliance details](#rfc-9111-compliance-matrix)).
 - **Cache Control**: Supports all required HTTP cache control directives, as well as extensions like [`stale-while-revalidate`](https://www.rfc-editor.org/rfc/rfc5861#section-3), [`stale-if-error`](https://www.rfc-editor.org/rfc/rfc5861#section-4) and [`immutable`](https://www.rfc-editor.org/rfc/rfc8246).
 - **Cache Backends**: Built-in support for file system and memory caches, with the ability to implement custom backends.
@@ -42,21 +42,21 @@ import (
     "log/slog"
     "net/http"
     "time"
-    
-	"github.com/bartventer/httpcache"
+
+    "github.com/bartventer/httpcache"
     // Register the file system cache backend
-    _ "github.com/bartventer/httpcache/store/fscache" 
+    _ "github.com/bartventer/httpcache/store/fscache"
 )
 
 func main() {
     // Example DSN for the file system cache backend
-    dsn := "fscache://?appname=myapp" 
+    dsn := "fscache://?appname=myapp"
     client := &http.Client{
         Transport: httpcache.NewTransport(
             dsn,
             httpcache.WithSWRTimeout(10*time.Second),
             httpcache.WithLogger(slog.Default()),
-    	),
+        ),
     }
     // ... Use the client as usual
 }
@@ -123,25 +123,25 @@ X-Httpcache-Status: HIT
 
 | §   | Title                                         | Requirement | Implemented | Notes                                      |
 | --- | --------------------------------------------- | :---------: | :---------: | ------------------------------------------ |
-| 1.  | Introduction                                  |     N/A     |     N/A     | **Nothing to implement**                   |
-| 2.  | Overview of Cache Operation                   |     N/A     |     N/A     | **Nothing to implement**                   |
+| 1.  | Introduction                                  |     N/A     |     N/A     | Nothing to implement                       |
+| 2.  | Overview of Cache Operation                   |     N/A     |     N/A     | Nothing to implement                       |
 | 3.  | Storing Responses in Caches                   |  Required   |      ✔️      | [Details](#storing-responses-details)      |
 | 4.  | Constructing Responses from Caches            |  Required   |      ✔️      | [Details](#constructing-responses-details) |
 | 5.  | Field Definitions                             |  Required   |      ✔️      | [Details](#field-definitions-details)      |
-| 6.  | Relationship to Applications and Other Caches |     N/A     |     N/A     | **Nothing to implement**                   |
-| 7.  | Security Considerations                       |     N/A     |     N/A     | **Nothing to implement**                   |
-| 8.  | IANA Considerations                           |     N/A     |     N/A     | **Nothing to implement**                   |
-| 9.  | References                                    |     N/A     |     N/A     | **Nothing to implement**                   |
+| 6.  | Relationship to Applications and Other Caches |     N/A     |     N/A     | Nothing to implement                       |
+| 7.  | Security Considerations                       |     N/A     |     N/A     | Nothing to implement                       |
+| 8.  | IANA Considerations                           |     N/A     |     N/A     | Nothing to implement                       |
+| 9.  | References                                    |     N/A     |     N/A     | Nothing to implement                       |
 
 **Legend for Requirements:**
 
-| Requirement | Description                                                           |
-| ----------- | --------------------------------------------------------------------- |
-| Required    | Must be implemented for RFC compliance                                |
-| Optional    | Implementation is discretionary                                       |
-| Obsolete    | Directive is no longer relevant as per RFC 9111                       |
-| Deprecated  | Directive is deprecated as per RFC 9111, but can still be implemented |
-| N/A         | Nothing to implement or not applicable to private caches              |
+| Requirement | Description                                                             |
+| ----------- | ----------------------------------------------------------------------- |
+| Required    | *Must be implemented for RFC compliance*                                |
+| Optional    | *May be implemented, but not required for compliance*                   |
+| Obsolete    | *Directive is no longer relevant as per RFC 9111*                       |
+| Deprecated  | *Directive is deprecated as per RFC 9111, but can still be implemented* |
+| N/A         | *Nothing to implement or not applicable to private caches*              |
 
 <details id="storing-responses-details">
 <summary><strong>§3. Storing Responses in Caches (Details)</strong></summary>
@@ -183,13 +183,13 @@ X-Httpcache-Status: HIT
 <details id="validation-details">
 <summary><em>§4.3. Validation (Subsections)</em></summary>
 
-|   §    | Title                                       | Requirement | Implemented | Notes                                            |
-| :----: | ------------------------------------------- | :---------: | :---------: | ------------------------------------------------ |
-| 4.3.1. | Sending a Validation Request                |  Required   |      ✔️      |                                                  |
-| 4.3.2. | Handling Received Validation Request        |     N/A     |     N/A     | **Not applicable to private client-side caches** |
-| 4.3.3. | Handling a Validation Response              |  Required   |      ✔️      |                                                  |
-| 4.3.4. | Freshening Stored Responses upon Validation |  Required   |      ✔️      |                                                  |
-| 4.3.5. | Freshening Responses with HEAD              |  Required   |      ✔️      |                                                  |
+|   §    | Title                                       | Requirement | Implemented | Notes                                        |
+| :----: | ------------------------------------------- | :---------: | :---------: | -------------------------------------------- |
+| 4.3.1. | Sending a Validation Request                |  Required   |      ✔️      |                                              |
+| 4.3.2. | Handling Received Validation Request        |     N/A     |     N/A     | Not applicable to private client-side caches |
+| 4.3.3. | Handling a Validation Response              |  Required   |      ✔️      |                                              |
+| 4.3.4. | Freshening Stored Responses upon Validation |  Required   |      ✔️      |                                              |
+| 4.3.5. | Freshening Responses with HEAD              |  Required   |      ✔️      |                                              |
 
 </details>
 
@@ -202,13 +202,13 @@ X-Httpcache-Status: HIT
 <details id="field-definitions-details">
 <summary><strong>§5. Field Definitions (Details)</strong></summary>
 
-| §    | Title         | Requirement | Implemented | Notes                                       |
-| ---- | ------------- | :---------: | :---------: | ------------------------------------------- |
-| 5.1. | Age           |  Required   |      ✔️      |                                             |
-| 5.2. | Cache-Control |  Required   |      ✔️      | [Details](#cache-control-directives)        |
-| 5.3. | Expires       |  Required   |      ✔️      |                                             |
-| 5.4. | Pragma        | Deprecated  |      ❌      | **Deprecated by RFC 9111; not implemented** |
-| 5.5. | Warning       |  Obsolete   |      ❌      | **Obsoleted by RFC 9111; not implemented**  |
+| §    | Title         | Requirement | Implemented | Notes                                   |
+| ---- | ------------- | :---------: | :---------: | --------------------------------------- |
+| 5.1. | Age           |  Required   |      ✔️      |                                         |
+| 5.2. | Cache-Control |  Required   |      ✔️      | [Details](#cache-control-directives)    |
+| 5.3. | Expires       |  Required   |      ✔️      |                                         |
+| 5.4. | Pragma        | Deprecated  |      ❌      | Deprecated by RFC 9111; not implemented |
+| 5.5. | Warning       |  Obsolete   |      ❌      | Obsoleted by RFC 9111; not implemented  |
 
 <details id="cache-control-directives">
 <summary><em>§5.2. Cache-Control Directives</em></summary>
@@ -220,15 +220,15 @@ X-Httpcache-Status: HIT
 <details id="request-directives-details">
 <summary><em>§5.2.1. Request Directives (Details)</em></summary>
 
-| §        | Title/Directive  | Requirement | Implemented | Notes                                                              |
-| -------- | ---------------- | :---------: | :---------: | ------------------------------------------------------------------ |
-| 5.2.1.1. | `max-age`        |  Optional   |      ✔️      |                                                                    |
-| 5.2.1.2. | `max-stale`      |  Optional   |      ✔️      |                                                                    |
-| 5.2.1.3. | `min-fresh`      |  Optional   |      ✔️      |                                                                    |
-| 5.2.1.4. | `no-cache`       |  Optional   |      ✔️      |                                                                    |
-| 5.2.1.5. | `no-store`       |  Optional   |      ✔️      |                                                                    |
-| 5.2.1.6. | `no-transform`   |  Optional   |      ✔️      | **Compliant by default - implementation never transforms content** |
-| 5.2.1.7. | `only-if-cached` |  Optional   |      ✔️      |                                                                    |
+| §        | Title/Directive  | Requirement | Implemented | Notes                                                          |
+| -------- | ---------------- | :---------: | :---------: | -------------------------------------------------------------- |
+| 5.2.1.1. | `max-age`        |  Optional   |      ✔️      |                                                                |
+| 5.2.1.2. | `max-stale`      |  Optional   |      ✔️      |                                                                |
+| 5.2.1.3. | `min-fresh`      |  Optional   |      ✔️      |                                                                |
+| 5.2.1.4. | `no-cache`       |  Optional   |      ✔️      |                                                                |
+| 5.2.1.5. | `no-store`       |  Optional   |      ✔️      |                                                                |
+| 5.2.1.6. | `no-transform`   |  Optional   |      ✔️      | Compliant by default - implementation never transforms content |
+| 5.2.1.7. | `only-if-cached` |  Optional   |      ✔️      |                                                                |
 
 </details>
 
@@ -239,18 +239,18 @@ X-Httpcache-Status: HIT
 <details id="response-directives-details">
 <summary><em>§5.2.2. Response Directives (Details)</em></summary>
 
-| §         | Title/Directive    | Requirement | Implemented | Notes                                                              |
-| --------- | ------------------ | :---------: | :---------: | ------------------------------------------------------------------ |
-| 5.2.2.1.  | `max-age`          |  Required   |      ✔️      |                                                                    |
-| 5.2.2.2.  | `must-revalidate`  |  Required   |      ✔️      |                                                                    |
-| 5.2.2.3.  | `must-understand`  |  Required   |      ✔️      |                                                                    |
-| 5.2.2.4.  | `no-cache`         |  Required   |      ✔️      | **Both qualified and unqualified forms supported**                 |
-| 5.2.2.5.  | `no-store`         |  Required   |      ✔️      |                                                                    |
-| 5.2.2.6.  | `no-transform`     |  Required   |      ✔️      | **Compliant by default - implementation never transforms content** |
-| 5.2.2.7.  | `private`          |     N/A     |     N/A     | **Intended for shared caches; not applicable to private caches**   |
-| 5.2.2.8.  | `proxy-revalidate` |     N/A     |     N/A     | **Intended for shared caches; not applicable to private caches**   |
-| 5.2.2.9.  | `public`           |  Optional   |      ✔️      |                                                                    |
-| 5.2.2.10. | `s-maxage`         |     N/A     |     N/A     | **Intended for shared caches; not applicable to private caches**   |
+| §         | Title/Directive    | Requirement | Implemented | Notes                                                          |
+| --------- | ------------------ | :---------: | :---------: | -------------------------------------------------------------- |
+| 5.2.2.1.  | `max-age`          |  Required   |      ✔️      |                                                                |
+| 5.2.2.2.  | `must-revalidate`  |  Required   |      ✔️      |                                                                |
+| 5.2.2.3.  | `must-understand`  |  Required   |      ✔️      |                                                                |
+| 5.2.2.4.  | `no-cache`         |  Required   |      ✔️      | Both qualified and unqualified forms supported                 |
+| 5.2.2.5.  | `no-store`         |  Required   |      ✔️      |                                                                |
+| 5.2.2.6.  | `no-transform`     |  Required   |      ✔️      | Compliant by default - implementation never transforms content |
+| 5.2.2.7.  | `private`          |     N/A     |     N/A     | Intended for shared caches; not applicable to private caches   |
+| 5.2.2.8.  | `proxy-revalidate` |     N/A     |     N/A     | Intended for shared caches; not applicable to private caches   |
+| 5.2.2.9.  | `public`           |  Optional   |      ✔️      |                                                                |
+| 5.2.2.10. | `s-maxage`         |     N/A     |     N/A     | Intended for shared caches; not applicable to private caches   |
 
 </details>
 
@@ -263,11 +263,11 @@ X-Httpcache-Status: HIT
 
 The following additional cache control directives are supported, as defined in various RFCs:
 
-| Reference                                                        | Directive                | Notes                                   |
-| ---------------------------------------------------------------- | ------------------------ | --------------------------------------- |
-| [RFC 5861, §3](https://www.rfc-editor.org/rfc/rfc5861#section-3) | `stale-while-revalidate` | Only applies to responses.              |
-| [RFC 5861, §4](https://www.rfc-editor.org/rfc/rfc5861#section-4) | `stale-if-error`         | Applies to both requests and responses. |
-| [RFC 8246, $2](https://www.rfc-editor.org/rfc/rfc8246)           | `immutable`              | Only applies to responses.              |
+| Reference                                                        | Directive                | Notes                                  |
+| ---------------------------------------------------------------- | ------------------------ | -------------------------------------- |
+| [RFC 5861, §3](https://www.rfc-editor.org/rfc/rfc5861#section-3) | `stale-while-revalidate` | Only applies to responses              |
+| [RFC 5861, §4](https://www.rfc-editor.org/rfc/rfc5861#section-4) | `stale-if-error`         | Applies to both requests and responses |
+| [RFC 8246, §2](https://www.rfc-editor.org/rfc/rfc8246)           | `immutable`              | Only applies to responses              |
 
 </details>
 </details>
