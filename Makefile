@@ -45,13 +45,9 @@ deps/update: ## Update dependencies
 	go mod tidy -v
 
 ## Generators:
-.PHONY: generate
-generate: ## Generate code
-	go generate ./...
-
-.PHONY: docs
-docs: ## Generate documentation
-	./scripts/docs.sh
+.PHONY: gif
+gif: ## Generate GIF for example application
+	./scripts/gif.sh
 
 ## Code Quality:
 fmt: $(FMTSTAMP) ## Format code
@@ -89,10 +85,6 @@ endif
 .PHONY: browser/cover
 browser/cover: ## Open coverage report in browser
 	$(call open_browser,$(OUTPUTDIR)/$(COVERHTML))
-
-.PHONY: gif
-gif: ## Generate GIF for example application
-	./scripts/gif.sh
 
 .PHONY: clean
 clean: ## Clean up build artifacts
