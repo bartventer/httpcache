@@ -17,7 +17,6 @@ func isUnsafeMethod(req *http.Request) bool {
 	}
 }
 
-// isNonErrorStatus reports whether the status code is 2xx or 3xx.
 func isNonErrorStatus(status int) bool {
 	return (status >= 200 && status < 400)
 }
@@ -35,7 +34,6 @@ func make504Response(req *http.Request) (*http.Response, error) {
 	return http.ReadResponse(bufio.NewReader(&buf), req)
 }
 
-// cloneRequest creates a shallow copy of the request, including cloning the headers.
 func cloneRequest(req *http.Request) *http.Request {
 	req2 := new(http.Request)
 	*req2 = *req

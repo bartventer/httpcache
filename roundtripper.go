@@ -47,7 +47,6 @@ import (
 
 const CacheStatusHeader = internal.CacheStatusHeader
 
-// Option is a functional option for configuring the RoundTripper.
 type Option interface {
 	apply(*roundTripper)
 }
