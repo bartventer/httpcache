@@ -127,6 +127,37 @@ func TestRoundTripper_CacheHit(t *testing.T) {
 	assertCacheStatus(t, resp, internal.CacheStatusHit)
 }
 
+func TestRoundTripper_CacheHit_Immutable(t *testing.T) {
+	storedResp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Cache-Control": []string{"max-age=60, immutable"}},
+		Body:       http.NoBody,
+	}
+	storedEntry := &internal.Entry{Response: storedResp, ReqTime: time.Now(), RespTime: time.Now()}
+
+	rt := newTestRoundTripper(func(rt *roundTripper) {
+		rt.cache = &internal.MockResponseCache{
+			GetFunc: func(key string, req *http.Request) (*internal.Entry, error) { return storedEntry, nil },
+		}
+		rt.fc = &internal.MockFreshnessCalculator{
+			CalculateFreshnessFunc: func(resp *http.Response, reqCC internal.CCRequestDirectives, resCC internal.CCResponseDirectives) *internal.Freshness {
+				return &internal.Freshness{
+					IsStale:    false,
+					Age:        &internal.Age{},
+					UsefulLife: 60 * time.Second,
+				}
+			},
+		}
+	})
+
+	req, _ := http.NewRequest(http.MethodGet, "http://example.com", nil)
+	resp, err := rt.RoundTrip(req)
+	testutil.RequireNoError(t, err)
+	testutil.AssertNotNil(t, resp)
+	testutil.AssertEqual(t, http.StatusOK, resp.StatusCode)
+	assertCacheStatus(t, resp, internal.CacheStatusHit)
+}
+
 func TestRoundTripper_CacheHit_MustRevalidate_Stale(t *testing.T) {
 	storedResp := &http.Response{
 		StatusCode: http.StatusOK,

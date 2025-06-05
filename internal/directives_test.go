@@ -84,7 +84,7 @@ func TestParseCCRequestDirectives_AllDirectives(t *testing.T) {
 func TestParseCCResponseDirectives_AllDirectives(t *testing.T) {
 	header := http.Header{
 		"Cache-Control": []string{
-			`no-cache="foo,bar", max-age=3600, must-revalidate, must-understand, no-store, public, stale-if-error=120, stale-while-revalidate=60`,
+			`no-cache="foo,bar", max-age=3600, must-revalidate, must-understand, no-store, public, stale-if-error=120, stale-while-revalidate=60, immutable`,
 		},
 	}
 	got := ParseCCResponseDirectives(header)
@@ -99,6 +99,7 @@ func TestParseCCResponseDirectives_AllDirectives(t *testing.T) {
 		"public":                 "",
 		"stale-if-error":         "120",
 		"stale-while-revalidate": "60",
+		"immutable":              "",
 	}
 	t.Run("map equality", func(t *testing.T) {
 		testutil.AssertTrue(t, maps.Equal(want, got))
@@ -149,5 +150,9 @@ func TestParseCCResponseDirectives_AllDirectives(t *testing.T) {
 			gotNoCache = append(gotNoCache, v)
 		}
 		testutil.AssertTrue(t, slices.Equal(expectedNoCache, gotNoCache))
+	})
+
+	t.Run("Immutable", func(t *testing.T) {
+		testutil.AssertTrue(t, got.Immutable())
 	})
 }
