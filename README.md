@@ -151,7 +151,7 @@ X-Httpcache-Status: HIT
 | 3.1. Storing Header and Trailer Fields           |  Required   |      ✔️      |                                 |
 | 3.2. Updating Stored Header Fields               |  Required   |      ✔️      |                                 |
 | 3.3. Storing Incomplete Responses                |  Optional   |      ❌      | See [Limitations](#limitations) |
-| 3.4. Combining Partial Content                   |  Optional   |      ❌      | ^^                              |
+| 3.4. Combining Partial Content                   |  Optional   |      ❌      | See [Limitations](#limitations) |
 | 3.5. Storing Responses to Authenticated Requests |  Required   |      ✔️      |                                 |
 
 </details>
