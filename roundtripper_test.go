@@ -11,6 +11,7 @@ import (
 
 	"github.com/bartventer/httpcache/internal"
 	"github.com/bartventer/httpcache/internal/testutil"
+	_ "github.com/bartventer/httpcache/store/memcache"
 )
 
 // Helper to create a roundTripper with custom fields for each test.
@@ -686,4 +687,37 @@ func Test_newTransport_Panic(t *testing.T) {
 		WithLogger(slog.New(slog.DiscardHandler)),
 	)
 	testutil.AssertTrue(t, panicked, "expected panic when cache is nil")
+}
+
+func TestRoundTripper_Vary(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Vary", "Accept-Language")
+		w.Header().Set("Cache-Control", "max-age=60")
+		w.WriteHeader(http.StatusOK)
+		if r.Header.Get("Accept-Language") == "en-us" {
+			w.Write([]byte("hello world"))
+		} else {
+			w.Write([]byte("bonjour le monde"))
+		}
+	}))
+	defer server.Close()
+	rt := NewTransport("memcache://?appname=TestRoundTripper_Vary")
+	for i, tc := range []struct {
+		lang   string
+		result string
+	}{
+		{"en-us", "MISS"}, // Get english, miss
+		{"en-us", "HIT"},  // Get english, hit (cached)
+		{"fr-fr", "MISS"}, // Get french, miss
+		{"fr-fr", "HIT"},  // Get french, hit (cached)
+		{"en-us", "HIT"},  // Get english, hit (still cached)
+		{"fr-fr", "HIT"},  // Get french, hit (still cached)
+	} {
+		req, _ := http.NewRequest(http.MethodGet, server.URL, nil)
+		req.Header.Set("Accept-Language", tc.lang)
+		resp, err := rt.RoundTrip(req)
+		testutil.RequireNoError(t, err)
+		testutil.AssertEqual(t, "Accept-Language", resp.Header.Get("Vary"), i)
+		testutil.AssertEqual(t, tc.result, resp.Header.Get("X-Httpcache-Status"), i)
+	}
 }
