@@ -11,13 +11,15 @@
 
 ## Features
 
-- **Plug-and-Play**: Drop-in replacement for [`http.DefaultTransport`](https://pkg.go.dev/net/http#DefaultTransport) with no additional configuration required.
+- **Plug-and-Play**: Just swap in as your HTTP client's transport; no extra configuration needed.[^1]
 - **RFC 9111 Compliance**: Handles validation, expiration, and revalidation ([view full compliance details](#rfc-9111-compliance-matrix)).
-- **Cache Control**: Supports all required HTTP cache control directives, as well as extensions like [`stale-while-revalidate`](https://www.rfc-editor.org/rfc/rfc5861#section-3), [`stale-if-error`](https://www.rfc-editor.org/rfc/rfc5861#section-4) and [`immutable`](https://www.rfc-editor.org/rfc/rfc8246).
-- **Cache Backends**: Built-in support for file system and memory caches, with the ability to implement custom backends.
-- **Extensible**: Options for logging, transport and timeouts.
-- **Debuggable**: Adds a cache status header to every response.
+- **Cache Control**: Supports all required HTTP cache control directives, as well as extensions like `stale-while-revalidate`, `stale-if-error`, and `immutable` ([view details](#field-definitions-details)).
+- **Cache Backends**: Built-in support for file system and memory caches, with the ability to implement custom backends (see [Cache Backends](#cache-backends)).
+- **Extensible**: Options for logging, transport and timeouts (see [Options](#options)).
+- **Debuggable**: Adds a cache status header to every response (see [Cache Status Header](#cache-status-header)).
 - **Zero Dependencies**: No external dependencies, pure Go implementation.
+
+[^1]: While no configuration is needed, you can customize the underlying transport. `httpcache` wraps your transport (default: `http.DefaultTransport`) to add caching with minimal code changes.
 
 ![Made with VHS](https://vhs.charm.sh/vhs-3WOBtYTZzzXggFGYRudHTV.gif)
 
