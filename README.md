@@ -19,8 +19,6 @@
 - **Debuggable**: Adds a cache status header to every response (see [Cache Status Header](#cache-status-header)).
 - **Zero Dependencies**: No external dependencies, pure Go implementation.
 
-[^1]: While no configuration is needed, you can customize the underlying transport. `httpcache` wraps your transport (default: `http.DefaultTransport`) to add caching with minimal code changes.
-
 ![Made with VHS](https://vhs.charm.sh/vhs-3WOBtYTZzzXggFGYRudHTV.gif)
 
 *Demonstration of HTTP caching in action. See [_examples/app](_examples/app/app.go) for code.*
@@ -278,3 +276,7 @@ The following additional cache control directives are supported, as defined in v
 ## License
 
 This project is licensed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). See the [LICENSE](LICENSE) file for details.
+
+## Notes
+
+[^1]: While no configuration is needed, you can customize the underlying transport. `httpcache` wraps your transport (default: `http.DefaultTransport`) to add caching with minimal code changes.
