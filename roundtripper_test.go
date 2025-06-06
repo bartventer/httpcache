@@ -701,7 +701,7 @@ func TestRoundTripper_Vary(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	rt := NewTransport("memcache://?appname=TestRoundTripper_Vary")
+	rt := NewTransport("memcache://")
 	for i, tc := range []struct {
 		lang   string
 		result string
