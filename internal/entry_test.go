@@ -13,7 +13,7 @@ import (
 )
 
 func TestEntry_MarshalUnmarshalBinary_Success(t *testing.T) {
-	reqTime := time.Now().Truncate(time.Second)
+	reqTime := time.Unix(0, 0).UTC()
 	respTime := reqTime.Add(2 * time.Second)
 	resp := httptest.NewRecorder().Result()
 	resp.Body = io.NopCloser(strings.NewReader("hello world"))
@@ -52,7 +52,7 @@ func TestEntry_UnmarshalBinaryWithRequest_InvalidReqTime(t *testing.T) {
 
 func TestEntry_UnmarshalBinaryWithRequest_InvalidRespTime(t *testing.T) {
 	// Valid reqTime, corrupt respTime
-	now := time.Now()
+	now := time.Unix(0, 0).UTC()
 	reqTimeBytes, _ := now.MarshalBinary()
 
 	var buf bytes.Buffer
@@ -69,7 +69,7 @@ func TestEntry_UnmarshalBinaryWithRequest_InvalidRespTime(t *testing.T) {
 
 func TestEntry_UnmarshalBinaryWithRequest_InvalidResponse(t *testing.T) {
 	// Valid times, corrupt response
-	now := time.Now()
+	now := time.Unix(0, 0).UTC()
 	reqTimeBytes, _ := now.MarshalBinary()
 	respTimeBytes, _ := now.MarshalBinary()
 

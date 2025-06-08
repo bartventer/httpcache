@@ -8,20 +8,30 @@ import (
 // CacheInvalidator describes the interface implemented by types that can invalidate cache entries
 // based on request and response headers, as specified in RFC 9111 §4.4.
 type CacheInvalidator interface {
-	InvalidateCache(reqURL *url.URL, respHeader http.Header, key string)
+	InvalidateCache(reqURL *url.URL, respHeader http.Header, headers HeaderEntries, key string)
 }
 
 type cacheInvalidator struct {
-	cache ResponseCache // Cache to invalidate entries from
-	cke   CacheKeyer    // Cache key generator
+	cache ResponseCache
+	cke   URLKeyer
 }
 
-func NewCacheInvalidator(cache ResponseCache, cke CacheKeyer) *cacheInvalidator {
+func NewCacheInvalidator(cache ResponseCache, cke URLKeyer) *cacheInvalidator {
 	return &cacheInvalidator{cache, cke}
 }
 
-func (r *cacheInvalidator) InvalidateCache(reqURL *url.URL, respHeader http.Header, key string) {
+func (r *cacheInvalidator) InvalidateCache(
+	reqURL *url.URL,
+	respHeader http.Header,
+	headers HeaderEntries,
+	key string,
+) {
 	_ = r.cache.Delete(key)
+	if len(headers) > 0 {
+		for _, h := range headers.Keys() {
+			_ = r.cache.Delete(h)
+		}
+	}
 	r.invalidateLocationHeaders(reqURL, respHeader)
 }
 
@@ -40,8 +50,13 @@ func (r *cacheInvalidator) invalidateLocationHeaders(reqURL *url.URL, respHeader
 		// Resolve relative URIs against request URI
 		locURL = reqURL.ResolveReference(locURL)
 		if sameOrigin(reqURL, locURL) {
-			key := r.cke.CacheKey(locURL)
-			_ = r.cache.Delete(key)
+			locKey := r.cke.URLKey(locURL)
+			headers, _ := r.cache.GetHeaders(locKey)
+			if len(headers) > 0 {
+				for _, h := range headers.Keys() {
+					_ = r.cache.Delete(h)
+				}
+			}
 		}
 	}
 }

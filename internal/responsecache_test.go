@@ -2,7 +2,9 @@ package internal
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -217,6 +219,165 @@ func Test_responseCache_Delete(t *testing.T) {
 				cache: tt.fields.cache,
 			}
 			tt.assertion(t, r.Delete(tt.args.key))
+		})
+	}
+}
+
+func Test_responseCache_GetHeaders(t *testing.T) {
+	type fields struct {
+		cache Cache
+	}
+	type args struct {
+		key string
+	}
+	tests := []struct {
+		name      string
+		fields    fields
+		args      args
+		assertion func(tt *testing.T, got HeaderEntries, err error, i ...interface{}) bool
+	}{
+		{
+			name: "successful get headers",
+			fields: fields{
+				cache: &MockCache{
+					GetFunc: func(key string) ([]byte, error) {
+						data := `[{"vary":"Accept","vary_resolved":{"Accept":"application/json"},"response_id":"https://example.com/test#1234567890","timestamp":"2023-10-01T00:00:00Z"}]`
+						return []byte(data), nil
+					},
+				},
+			},
+			args: args{
+				key: "test-key",
+			},
+			assertion: func(tt *testing.T, got HeaderEntries, err error, i ...interface{}) bool {
+				testutil.RequireNoError(tt, err)
+				testutil.AssertNotNil(tt, got)
+				testutil.AssertTrue(tt, len(got) > 0, "Expected non-empty headers")
+				testutil.AssertEqual(tt, got[0].Vary, "Accept")
+				testutil.AssertEqual(tt, got[0].VaryResolved["Accept"], "application/json")
+				testutil.AssertEqual(tt, got[0].ResponseID, "https://example.com/test#1234567890")
+				testutil.AssertTrue(
+					tt,
+					got[0].Timestamp.Equal(time.Date(2023, 10, 1, 0, 0, 0, 0, time.UTC)),
+					"Timestamp mismatch",
+				)
+				return true
+			},
+		},
+		{
+			name: "cache miss",
+			fields: fields{
+				cache: &MockCache{
+					GetFunc: func(key string) ([]byte, error) {
+						return nil, testutil.ErrSample
+					},
+				},
+			},
+			args: args{
+				key: "test-key",
+			},
+			assertion: func(tt *testing.T, got HeaderEntries, err error, i ...interface{}) bool {
+				testutil.RequireErrorIs(tt, err, testutil.ErrSample)
+				testutil.AssertNil(tt, got)
+				return true
+			},
+		},
+		{
+			name: "unmarshal error",
+			fields: fields{
+				cache: &MockCache{
+					GetFunc: func(key string) ([]byte, error) {
+						return []byte("invalid data"), nil
+					},
+				},
+			},
+			args: args{
+				key: "test-key",
+			},
+			assertion: func(tt *testing.T, got HeaderEntries, err error, i ...interface{}) bool {
+				var syntaxErr *json.SyntaxError
+				testutil.RequireErrorAs(tt, err, &syntaxErr)
+				testutil.AssertNil(tt, got)
+				return true
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &responseCache{
+				cache: tt.fields.cache,
+			}
+			got, err := r.GetHeaders(tt.args.key)
+			tt.assertion(t, got, err)
+		})
+	}
+}
+
+func Test_responseCache_SetHeaders(t *testing.T) {
+	type fields struct {
+		cache Cache
+	}
+	type args struct {
+		key     string
+		headers HeaderEntries
+	}
+	tests := []struct {
+		name      string
+		fields    fields
+		args      args
+		assertion func(tt *testing.T, err error, i ...interface{}) bool
+	}{
+		{
+			name: "successful set headers",
+			fields: fields{
+				cache: &MockCache{
+					SetFunc: func(key string, entry []byte) error {
+						return nil
+					},
+				},
+			},
+			args: args{
+				key: "test-key",
+				headers: HeaderEntries{
+					{
+						Vary:         "Accept",
+						VaryResolved: map[string]string{"Accept": "application/json"},
+						ResponseID:   "https://example.com/test#1234567890",
+						Timestamp:    time.Date(2023, 10, 1, 0, 0, 0, 0, time.UTC),
+					},
+				},
+			},
+			assertion: func(tt *testing.T, err error, i ...interface{}) bool {
+				testutil.RequireNoError(tt, err)
+				return true
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &responseCache{
+				cache: tt.fields.cache,
+			}
+			err := r.SetHeaders(tt.args.key, tt.args.headers)
+			tt.assertion(t, err)
+		})
+	}
+}
+
+func TestNewResponseCache(t *testing.T) {
+	type args struct {
+		cache Cache
+	}
+	tests := []struct {
+		name string
+		args args
+		want *responseCache
+	}{}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := NewResponseCache(tt.args.cache); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("NewResponseCache() = %v, want %v", got, tt.want)
+			}
 		})
 	}
 }

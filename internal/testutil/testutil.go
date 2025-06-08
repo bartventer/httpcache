@@ -10,10 +10,25 @@ import (
 
 var ErrSample = errors.New("an error")
 
-func assert(t *testing.T, condition bool, msgAndArgs ...interface{}) bool {
+type T interface {
+	Helper()
+	Errorf(format string, args ...interface{})
+	Fatalf(format string, args ...interface{})
+}
+
+func assert(t T, condition bool, msgAndArgs ...interface{}) bool {
 	t.Helper()
+	//nolint:nestif // Acceptable for readability
 	if !condition {
-		t.Errorf("assert failed: %s", msgAndArgs)
+		if len(msgAndArgs) > 0 {
+			if format, ok := msgAndArgs[0].(string); ok && len(msgAndArgs) > 1 {
+				t.Errorf(format, msgAndArgs[1:]...)
+			} else {
+				t.Errorf("%v", msgAndArgs...)
+			}
+		} else {
+			t.Errorf("assert failed")
+		}
 		return false
 	}
 	return true

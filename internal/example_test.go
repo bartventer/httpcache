@@ -5,7 +5,7 @@ import (
 	"net/url"
 )
 
-func Example_makeKey() {
+func Example_makeURLKey() {
 	u, err := url.Parse(
 		"https://example.com:8443/abc?query=param&another=value#fragment=part1&part2",
 	)
@@ -13,7 +13,7 @@ func Example_makeKey() {
 		fmt.Println("Error parsing URL:", err)
 		return
 	}
-	cacheKey := makeKey(u)
+	cacheKey := makeURLKey(u)
 	fmt.Println("Cache Key:", cacheKey)
 	// Output:
 	// Cache Key: https://example.com:8443/abc?query=param&another=value

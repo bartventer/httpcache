@@ -20,7 +20,7 @@ type Entry struct {
 
 var _ encoding.BinaryMarshaler = (*Entry)(nil)
 
-func (e *Entry) MarshalBinary() ([]byte, error) {
+func (e Entry) MarshalBinary() ([]byte, error) {
 	reqTimeBytes, err := e.ReqTime.MarshalBinary()
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request time: %w", err)
@@ -80,4 +80,35 @@ func (e *Entry) UnmarshalBinaryWithRequest(data []byte, req *http.Request) error
 	e.RespTime = respTime
 	e.Response = resp
 	return nil
+}
+
+// HeaderEntry represents a cached HTTP response header entry.
+type HeaderEntry struct {
+	// The Vary header field value used to generate the response
+	Vary string `json:"vary"`
+
+	// VaryResolved is a map of header names to their normalized values that
+	// were used to generate the response.
+	VaryResolved map[string]string `json:"vary_resolved"`
+
+	// ResponseID is a unique identifier which serves as a foreign key
+	// to the full cached response entry, in the format:
+	//  <url>#<VaryResolvedHash>
+	//
+	// e.g., "https://example.com/path#1234567890"
+	ResponseID string `json:"response_id"`
+
+	// Timestamp is the time when the response was generated, typically from the Date header.
+	// If the Date header is not present, it falls back to the ResponseTime.
+	Timestamp time.Time `json:"timestamp"`
+}
+
+type HeaderEntries []*HeaderEntry
+
+func (he HeaderEntries) Keys() []string {
+	keys := make([]string, len(he))
+	for i, entry := range he {
+		keys[i] = entry.ResponseID
+	}
+	return keys
 }
