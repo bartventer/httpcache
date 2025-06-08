@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -9,10 +10,16 @@ import (
 
 type Cache = store.Cache
 
+// ResponseCache is an interface for caching HTTP responses.
+// It provides methods to delete any cached item by its key,
+// retrieve and set full cached responses, and manage headers associated
+// with a given URL key.
 type ResponseCache interface {
-	Get(key string, req *http.Request) (*Entry, error)
-	Set(key string, entry *Entry) error
+	Get(responseKey string, req *http.Request) (*Entry, error)
+	Set(responseKey string, entry *Entry) error
 	Delete(key string) error
+	GetHeaders(urlKey string) (HeaderEntries, error)
+	SetHeaders(urlKey string, headers HeaderEntries) error
 }
 
 type responseCache struct {
@@ -25,8 +32,8 @@ func NewResponseCache(cache Cache) *responseCache {
 
 var _ ResponseCache = (*responseCache)(nil)
 
-func (r *responseCache) Get(key string, req *http.Request) (*Entry, error) {
-	data, err := r.cache.Get(key)
+func (r *responseCache) Get(responseKey string, req *http.Request) (*Entry, error) {
+	data, err := r.cache.Get(responseKey)
 	if err != nil {
 		return nil, err
 	}
@@ -37,14 +44,34 @@ func (r *responseCache) Get(key string, req *http.Request) (*Entry, error) {
 	return entry, nil
 }
 
-func (r *responseCache) Set(key string, entry *Entry) error {
+func (r *responseCache) Set(responseKey string, entry *Entry) error {
 	data, err := entry.MarshalBinary()
 	if err != nil {
 		return fmt.Errorf("failed to marshal entry: %w", err)
 	}
-	return r.cache.Set(key, data)
+	return r.cache.Set(responseKey, data)
 }
 
 func (r *responseCache) Delete(key string) error {
 	return r.cache.Delete(key)
+}
+
+func (r *responseCache) GetHeaders(urlKey string) (HeaderEntries, error) {
+	data, err := r.cache.Get(urlKey)
+	if err != nil {
+		return nil, err
+	}
+	var refs HeaderEntries
+	if unmarshalErr := json.Unmarshal(data, &refs); unmarshalErr != nil {
+		return nil, fmt.Errorf("failed to unmarshal cached entries: %w", unmarshalErr)
+	}
+	return refs, nil
+}
+
+func (r *responseCache) SetHeaders(urlKey string, headers HeaderEntries) error {
+	data, err := json.Marshal(headers)
+	if err != nil {
+		return fmt.Errorf("failed to marshal headers: %w", err)
+	}
+	return r.cache.Set(urlKey, data)
 }

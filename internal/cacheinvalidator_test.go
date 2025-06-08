@@ -19,13 +19,22 @@ func (m *mockDeleterCache) Delete(key string) error {
 //nolint:nilnil // This is a mock implementation, so returning nil is acceptable.
 func (m *mockDeleterCache) Get(key string, req *http.Request) (*Entry, error) { return nil, nil }
 func (m *mockDeleterCache) Set(key string, entry *Entry) error                { return nil }
+func (m *mockDeleterCache) GetHeaders(key string) (HeaderEntries, error) {
+	if key == "loc" {
+		return HeaderEntries{&HeaderEntry{ResponseID: "loc"}}, nil
+	}
+	return nil, nil
+}
+func (m *mockDeleterCache) SetHeaders(key string, headers HeaderEntries) error {
+	return nil
+}
 
 type mockKeyer struct {
 	calledWith []*url.URL
 	returnKey  string
 }
 
-func (m *mockKeyer) CacheKey(u *url.URL) string {
+func (m *mockKeyer) URLKey(u *url.URL) string {
 	m.calledWith = append(m.calledWith, u)
 	return m.returnKey
 }
@@ -36,6 +45,7 @@ func Test_cacheInvalidator_InvalidateCache(t *testing.T) {
 		name           string
 		respHeaders    map[string]string
 		locationOrigin *url.URL
+		headers        HeaderEntries
 		expectDeletes  []string
 	}{
 		{
@@ -71,6 +81,17 @@ func Test_cacheInvalidator_InvalidateCache(t *testing.T) {
 			},
 			expectDeletes: []string{"main"},
 		},
+		{
+			name: "with headers to delete",
+			respHeaders: map[string]string{
+				"Location": "/bar",
+			},
+			headers: HeaderEntries{
+				&HeaderEntry{ResponseID: "header1"},
+				&HeaderEntry{ResponseID: "header2"},
+			},
+			expectDeletes: []string{"main", "loc", "header1", "header2"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -82,7 +103,9 @@ func Test_cacheInvalidator_InvalidateCache(t *testing.T) {
 				respHeader.Set(k, v)
 			}
 			ci := &cacheInvalidator{cache: mc, cke: mk}
-			ci.InvalidateCache(reqURL, respHeader, "main")
+			ci.InvalidateCache(reqURL, respHeader, tt.headers, "main")
+			slices.Sort(mc.deletedKeys)
+			slices.Sort(tt.expectDeletes)
 			if !slices.Equal(mc.deletedKeys, tt.expectDeletes) {
 				t.Errorf("expected deleted keys %v, got %v", tt.expectDeletes, mc.deletedKeys)
 			}

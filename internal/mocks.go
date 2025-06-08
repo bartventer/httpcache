@@ -29,9 +29,21 @@ func (m *MockCache) Delete(key string) error {
 var _ ResponseCache = (*MockResponseCache)(nil)
 
 type MockResponseCache struct {
-	GetFunc    func(key string, req *http.Request) (*Entry, error)
-	SetFunc    func(key string, entry *Entry) error
-	DeleteFunc func(key string) error
+	GetFunc        func(key string, req *http.Request) (*Entry, error)
+	SetFunc        func(key string, entry *Entry) error
+	DeleteFunc     func(key string) error
+	GetHeadersFunc func(key string) (HeaderEntries, error)
+	SetHeadersFunc func(key string, headers HeaderEntries) error
+}
+
+// GetHeaders implements ResponseCache.
+func (m *MockResponseCache) GetHeaders(key string) (HeaderEntries, error) {
+	return m.GetHeadersFunc(key)
+}
+
+// SetHeaders implements ResponseCache.
+func (m *MockResponseCache) SetHeaders(key string, headers HeaderEntries) error {
+	return m.SetHeadersFunc(key, headers)
 }
 
 func (m *MockResponseCache) Get(key string, req *http.Request) (*Entry, error) {
@@ -57,20 +69,23 @@ func (m *MockRequestMethodChecker) IsRequestMethodUnderstood(req *http.Request) 
 var _ VaryMatcher = (*MockVaryMatcher)(nil)
 
 type MockVaryMatcher struct {
-	VaryHeadersMatchFunc func(cachedHdr, reqHdr http.Header) bool
+	VaryHeadersMatchFunc func(cachedHdrs HeaderEntries, reqHdr http.Header) (int, bool)
 }
 
-func (m *MockVaryMatcher) VaryHeadersMatch(cachedHdr, reqHdr http.Header) bool {
-	return m.VaryHeadersMatchFunc(cachedHdr, reqHdr)
+func (m *MockVaryMatcher) VaryHeadersMatch(
+	cachedHdrs HeaderEntries,
+	reqHdr http.Header,
+) (int, bool) {
+	return m.VaryHeadersMatchFunc(cachedHdrs, reqHdr)
 }
 
-var _ CacheKeyer = (*MockCacheKeyer)(nil)
+var _ URLKeyer = (*MockCacheKeyer)(nil)
 
 type MockCacheKeyer struct {
 	CacheKeyFunc func(u *url.URL) string
 }
 
-func (m *MockCacheKeyer) CacheKey(u *url.URL) string {
+func (m *MockCacheKeyer) URLKey(u *url.URL) string {
 	return m.CacheKeyFunc(u)
 }
 
@@ -124,29 +139,31 @@ func (m *MockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 var _ ResponseStorer = (*MockResponseStorer)(nil)
 
 type MockResponseStorer struct {
-	StoreResponseFunc func(resp *http.Response, key string, reqTime, respTime time.Time) error
+	StoreResponseFunc func(resp *http.Response, key string, headers HeaderEntries, reqTime, respTime time.Time) error
 }
 
 func (m *MockResponseStorer) StoreResponse(
 	resp *http.Response,
 	key string,
+	headers HeaderEntries,
 	reqTime, respTime time.Time,
 ) error {
-	return m.StoreResponseFunc(resp, key, reqTime, respTime)
+	return m.StoreResponseFunc(resp, key, headers, reqTime, respTime)
 }
 
 var _ CacheInvalidator = (*MockCacheInvalidator)(nil)
 
 type MockCacheInvalidator struct {
-	InvalidateCacheFunc func(reqURL *url.URL, respHeader http.Header, key string)
+	InvalidateCacheFunc func(reqURL *url.URL, respHeader http.Header, headers HeaderEntries, key string)
 }
 
 func (m *MockCacheInvalidator) InvalidateCache(
 	reqURL *url.URL,
 	respHeader http.Header,
+	headers HeaderEntries,
 	key string,
 ) {
-	m.InvalidateCacheFunc(reqURL, respHeader, key)
+	m.InvalidateCacheFunc(reqURL, respHeader, headers, key)
 }
 
 var _ ValidationResponseHandler = (*MockValidationResponseHandler)(nil)
@@ -163,3 +180,5 @@ func (m *MockValidationResponseHandler) HandleValidationResponse(
 ) (*http.Response, error) {
 	return m.HandleValidationResponseFunc(ctx, req, resp, err)
 }
+
+var _ VaryMatcher = (*MockVaryMatcher)(nil)
