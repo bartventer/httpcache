@@ -21,7 +21,7 @@ type Freshness struct {
 // heuristicFreshness calculates freshness lifetime using heuristics (10% of (date - last-modified)),
 // per RFC9111 §4.2.2.
 func heuristicFreshness(h http.Header, date time.Time) time.Duration {
-	lastMod, ok := lastModifiedHeader(h).Value()
+	lastMod, ok := lastModifiedFromHeader(h).Value()
 	if !ok || !lastMod.Before(date) {
 		return 0
 	}
@@ -95,7 +95,7 @@ func (f *freshnessCalculator) CalculateFreshness(
 		}
 	}
 
-	date, ok := dateHeader(resp.Header).Value()
+	date, ok := dateFromHeader(resp.Header).Value()
 	if !ok || date.IsZero() {
 		date = respTime // Fallback to response time if Date is missing
 	}
@@ -108,7 +108,7 @@ func (f *freshnessCalculator) CalculateFreshness(
 		usefulLife = maxAge // Response is fresh for max-age seconds
 	}
 	if usefulLife == 0 {
-		if expires, ok := expiresHeader(resp.Header).Value(); ok && expires.After(date) {
+		if expires, ok := expiresFromHeader(resp.Header).Value(); ok && expires.After(date) {
 			usefulLife = expires.Sub(date)
 		}
 	}
