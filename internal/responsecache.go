@@ -18,8 +18,8 @@ type ResponseCache interface {
 	Get(responseKey string, req *http.Request) (*ResponseEntry, error)
 	Set(responseKey string, entry *ResponseEntry) error
 	Delete(key string) error
-	GetHeaders(urlKey string) (HeaderEntries, error)
-	SetHeaders(urlKey string, headers HeaderEntries) error
+	GetHeaders(urlKey string) (VaryHeaderEntries, error)
+	SetHeaders(urlKey string, headers VaryHeaderEntries) error
 }
 
 type responseCache struct {
@@ -56,19 +56,19 @@ func (r *responseCache) Delete(key string) error {
 	return r.cache.Delete(key)
 }
 
-func (r *responseCache) GetHeaders(urlKey string) (HeaderEntries, error) {
+func (r *responseCache) GetHeaders(urlKey string) (VaryHeaderEntries, error) {
 	data, err := r.cache.Get(urlKey)
 	if err != nil {
 		return nil, err
 	}
-	var refs HeaderEntries
+	var refs VaryHeaderEntries
 	if unmarshalErr := json.Unmarshal(data, &refs); unmarshalErr != nil {
 		return nil, fmt.Errorf("failed to unmarshal cached entries: %w", unmarshalErr)
 	}
 	return refs, nil
 }
 
-func (r *responseCache) SetHeaders(urlKey string, headers HeaderEntries) error {
+func (r *responseCache) SetHeaders(urlKey string, headers VaryHeaderEntries) error {
 	data, err := json.Marshal(headers)
 	if err != nil {
 		return fmt.Errorf("failed to marshal headers: %w", err)

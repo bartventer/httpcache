@@ -234,7 +234,7 @@ func Test_responseCache_GetHeaders(t *testing.T) {
 		name      string
 		fields    fields
 		args      args
-		assertion func(tt *testing.T, got HeaderEntries, err error, i ...interface{}) bool
+		assertion func(tt *testing.T, got VaryHeaderEntries, err error, i ...interface{}) bool
 	}{
 		{
 			name: "successful get headers",
@@ -249,7 +249,7 @@ func Test_responseCache_GetHeaders(t *testing.T) {
 			args: args{
 				key: "test-key",
 			},
-			assertion: func(tt *testing.T, got HeaderEntries, err error, i ...interface{}) bool {
+			assertion: func(tt *testing.T, got VaryHeaderEntries, err error, i ...interface{}) bool {
 				testutil.RequireNoError(tt, err)
 				testutil.AssertNotNil(tt, got)
 				testutil.AssertTrue(tt, len(got) > 0, "Expected non-empty headers")
@@ -276,7 +276,7 @@ func Test_responseCache_GetHeaders(t *testing.T) {
 			args: args{
 				key: "test-key",
 			},
-			assertion: func(tt *testing.T, got HeaderEntries, err error, i ...interface{}) bool {
+			assertion: func(tt *testing.T, got VaryHeaderEntries, err error, i ...interface{}) bool {
 				testutil.RequireErrorIs(tt, err, testutil.ErrSample)
 				testutil.AssertNil(tt, got)
 				return true
@@ -294,7 +294,7 @@ func Test_responseCache_GetHeaders(t *testing.T) {
 			args: args{
 				key: "test-key",
 			},
-			assertion: func(tt *testing.T, got HeaderEntries, err error, i ...interface{}) bool {
+			assertion: func(tt *testing.T, got VaryHeaderEntries, err error, i ...interface{}) bool {
 				var syntaxErr *json.SyntaxError
 				testutil.RequireErrorAs(tt, err, &syntaxErr)
 				testutil.AssertNil(tt, got)
@@ -319,7 +319,7 @@ func Test_responseCache_SetHeaders(t *testing.T) {
 	}
 	type args struct {
 		key     string
-		headers HeaderEntries
+		headers VaryHeaderEntries
 	}
 	tests := []struct {
 		name      string
@@ -338,7 +338,7 @@ func Test_responseCache_SetHeaders(t *testing.T) {
 			},
 			args: args{
 				key: "test-key",
-				headers: HeaderEntries{
+				headers: VaryHeaderEntries{
 					{
 						Vary:         "Accept",
 						VaryResolved: map[string]string{"Accept": "application/json"},

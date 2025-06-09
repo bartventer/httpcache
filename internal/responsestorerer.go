@@ -13,7 +13,7 @@ type ResponseStorer interface {
 	StoreResponse(
 		resp *http.Response,
 		key string,
-		headers HeaderEntries,
+		headers VaryHeaderEntries,
 		reqTime, respTime time.Time,
 	) error
 }
@@ -39,14 +39,14 @@ func resolveDate(dateRaw string, fallback time.Time) time.Time {
 func (r *responseStorer) StoreResponse(
 	resp *http.Response,
 	key string,
-	headers HeaderEntries,
+	headers VaryHeaderEntries,
 	reqTime, respTime time.Time,
 ) error {
 	// Remove hop-by-hop headers as per RFC 9111 §3.1
 	removeHopByHopHeaders(resp)
 
 	if headers == nil {
-		headers = make(HeaderEntries, 0, 1)
+		headers = make(VaryHeaderEntries, 0, 1)
 	} else {
 		headers = slices.Grow(headers, 1)
 	}
@@ -55,7 +55,7 @@ func (r *responseStorer) StoreResponse(
 		r.vhn.NormalizeVaryHeader(resp.Header.Get("Vary"), resp.Request.Header),
 	)
 	responseID := r.vk.VaryKey(key, varyResolved)
-	headers = append(headers, &HeaderEntry{
+	headers = append(headers, &VaryHeaderEntry{
 		Vary:         resp.Header.Get("Vary"),
 		VaryResolved: varyResolved,
 		ResponseID:   responseID,

@@ -82,8 +82,9 @@ func (e *ResponseEntry) UnmarshalBinaryWithRequest(data []byte, req *http.Reques
 	return nil
 }
 
-// HeaderEntry represents a cached HTTP response header entry.
-type HeaderEntry struct {
+// VaryHeaderEntry represents a reference to a cached HTTP response
+// that is associated with a specific Vary header value.
+type VaryHeaderEntry struct {
 	// The Vary header field value used to generate the response
 	Vary string `json:"vary"`
 
@@ -103,9 +104,9 @@ type HeaderEntry struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
-type HeaderEntries []*HeaderEntry
+type VaryHeaderEntries []*VaryHeaderEntry
 
-func (he HeaderEntries) Keys() []string {
+func (he VaryHeaderEntries) ResponseIDs() []string {
 	keys := make([]string, len(he))
 	for i, entry := range he {
 		keys[i] = entry.ResponseID

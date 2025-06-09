@@ -87,7 +87,7 @@ func Test_validationResponseHandler_HandleValidationResponse(t *testing.T) {
 			setup: func(tc *testCase) {
 				invalidated := false
 				tc.handler.ci = &MockCacheInvalidator{
-					InvalidateCacheFunc: func(reqURL *url.URL, respHeader http.Header, headers HeaderEntries, key string) {
+					InvalidateCacheFunc: func(reqURL *url.URL, respHeader http.Header, headers VaryHeaderEntries, key string) {
 						invalidated = true
 						testutil.AssertEqual(t, "key", key)
 						testutil.AssertTrue(t, respHeader.Get("Cache-Control") == "")
@@ -163,7 +163,7 @@ func Test_validationResponseHandler_HandleValidationResponse(t *testing.T) {
 			setup: func(tc *testCase) {
 				stored := false
 				tc.handler.rs = &MockResponseStorer{
-					StoreResponseFunc: func(resp *http.Response, key string, headers HeaderEntries, reqTime, respTime time.Time) error {
+					StoreResponseFunc: func(resp *http.Response, key string, headers VaryHeaderEntries, reqTime, respTime time.Time) error {
 						stored = true
 						testutil.AssertEqual(t, "key", key)
 						testutil.AssertTrue(t, respTime.Equal(base))
@@ -192,7 +192,7 @@ func Test_validationResponseHandler_HandleValidationResponse(t *testing.T) {
 			setup: func(tc *testCase) {
 				invalidated := false
 				tc.handler.ci = &MockCacheInvalidator{
-					InvalidateCacheFunc: func(reqURL *url.URL, respHeader http.Header, headers HeaderEntries, key string) {
+					InvalidateCacheFunc: func(reqURL *url.URL, respHeader http.Header, headers VaryHeaderEntries, key string) {
 						invalidated = true
 						testutil.AssertEqual(t, "key", key)
 						testutil.AssertTrue(t, respHeader.Get("Cache-Control") == "")

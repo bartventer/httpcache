@@ -12,13 +12,13 @@ import (
 // of the cached response that matches the request headers, or -1 if no match
 // is found.
 type VaryMatcher interface {
-	VaryHeadersMatch(cachedHdrs HeaderEntries, reqHdr http.Header) (int, bool)
+	VaryHeadersMatch(cachedHdrs VaryHeaderEntries, reqHdr http.Header) (int, bool)
 }
 
-type VaryMatcherFunc func(cachedHdrs HeaderEntries, reqHdr http.Header) (int, bool)
+type VaryMatcherFunc func(cachedHdrs VaryHeaderEntries, reqHdr http.Header) (int, bool)
 
 func (f VaryMatcherFunc) VaryHeadersMatch(
-	cachedHdrs HeaderEntries,
+	cachedHdrs VaryHeaderEntries,
 	reqHdr http.Header,
 ) (int, bool) {
 	return f(cachedHdrs, reqHdr)
@@ -32,8 +32,8 @@ type varyMatcher struct {
 	hvn HeaderValueNormalizer
 }
 
-func (vm *varyMatcher) VaryHeadersMatch(entries HeaderEntries, reqHdr http.Header) (int, bool) {
-	slices.SortFunc(entries, func(a, b *HeaderEntry) int {
+func (vm *varyMatcher) VaryHeadersMatch(entries VaryHeaderEntries, reqHdr http.Header) (int, bool) {
+	slices.SortFunc(entries, func(a, b *VaryHeaderEntry) int {
 		aVary := strings.TrimSpace(a.Vary)
 		bVary := strings.TrimSpace(b.Vary)
 
