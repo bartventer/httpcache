@@ -39,7 +39,7 @@ func Test_responseStorer_StoreResponse(t *testing.T) {
 			name: "Successful store with nil headers",
 			fields: fields{
 				cache: &MockResponseCache{
-					SetFunc: func(key string, entry *Entry) error {
+					SetFunc: func(key string, entry *ResponseEntry) error {
 						testutil.AssertEqual(t, "test-key#mock", key)
 						testutil.AssertNotNil(t, entry)
 						return nil
@@ -86,7 +86,7 @@ func Test_responseStorer_StoreResponse(t *testing.T) {
 			name: "Successful store with existing headers",
 			fields: fields{
 				cache: &MockResponseCache{
-					SetFunc: func(key string, entry *Entry) error {
+					SetFunc: func(key string, entry *ResponseEntry) error {
 						return nil
 					},
 					SetHeadersFunc: func(key string, headers HeaderEntries) error {
@@ -170,7 +170,7 @@ func Test_responseStorer_StoreResponse(t *testing.T) {
 					SetHeadersFunc: func(key string, headers HeaderEntries) error {
 						return nil
 					},
-					SetFunc: func(key string, entry *Entry) error {
+					SetFunc: func(key string, entry *ResponseEntry) error {
 						return testutil.ErrSample
 					},
 				},

@@ -17,8 +17,10 @@ func (m *mockDeleterCache) Delete(key string) error {
 }
 
 //nolint:nilnil // This is a mock implementation, so returning nil is acceptable.
-func (m *mockDeleterCache) Get(key string, req *http.Request) (*Entry, error) { return nil, nil }
-func (m *mockDeleterCache) Set(key string, entry *Entry) error                { return nil }
+func (m *mockDeleterCache) Get(key string, req *http.Request) (*ResponseEntry, error) {
+	return nil, nil
+}
+func (m *mockDeleterCache) Set(key string, entry *ResponseEntry) error { return nil }
 func (m *mockDeleterCache) GetHeaders(key string) (HeaderEntries, error) {
 	if key == "loc" {
 		return HeaderEntries{&HeaderEntry{ResponseID: "loc"}}, nil

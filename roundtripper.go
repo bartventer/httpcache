@@ -253,7 +253,7 @@ func (r *roundTripper) handleCacheMiss(
 
 func (r *roundTripper) handleCacheHit(
 	req *http.Request,
-	stored *internal.Entry,
+	stored *internal.ResponseEntry,
 	urlKey string,
 	headers internal.HeaderEntries,
 ) (*http.Response, error) {
@@ -306,7 +306,7 @@ revalidate:
 }
 
 func (r *roundTripper) serveFromCache(
-	storedEntry *internal.Entry,
+	storedEntry *internal.ResponseEntry,
 	freshness *internal.Freshness,
 	noCacheQualified bool,
 	noCacheFieldsSeq iter.Seq[string],
@@ -324,7 +324,7 @@ func (r *roundTripper) serveFromCache(
 
 func (r *roundTripper) handleStaleWhileRevalidate(
 	req *http.Request,
-	storedEntry *internal.Entry,
+	storedEntry *internal.ResponseEntry,
 	cacheKey string,
 	freshness *internal.Freshness,
 	ccReq internal.CCRequestDirectives,
@@ -338,7 +338,7 @@ func (r *roundTripper) handleStaleWhileRevalidate(
 
 func (r *roundTripper) performBackgroundRevalidation(
 	req *http.Request,
-	storedEntry *internal.Entry,
+	storedEntry *internal.ResponseEntry,
 	cacheKey string,
 	freshness *internal.Freshness,
 	ccReq internal.CCRequestDirectives,
@@ -374,7 +374,7 @@ func (r *roundTripper) performBackgroundRevalidation(
 
 func (r *roundTripper) backgroundRevalidate(
 	req *http.Request,
-	stored *internal.Entry,
+	stored *internal.ResponseEntry,
 	cacheKey string,
 	freshness *internal.Freshness,
 	ccReq internal.CCRequestDirectives,

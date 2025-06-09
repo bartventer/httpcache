@@ -60,7 +60,7 @@ type FreshnessCalculator interface {
 	// CalculateFreshness calculates the freshness of a cached response
 	// based on the request and response cache control directives.
 	CalculateFreshness(
-		resp *Entry,
+		resp *ResponseEntry,
 		reqCC CCRequestDirectives,
 		resCC CCResponseDirectives,
 	) *Freshness
@@ -79,7 +79,7 @@ type freshnessCalculator struct {
 //
 //nolint:cyclop // Cyclomatic complexity is high due to multiple conditions, but it's necessary for RFC compliance.
 func (f *freshnessCalculator) CalculateFreshness(
-	entry *Entry,
+	entry *ResponseEntry,
 	reqCC CCRequestDirectives,
 	resCC CCResponseDirectives,
 ) *Freshness {

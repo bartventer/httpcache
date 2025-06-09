@@ -66,7 +66,7 @@ func (r *responseStorer) StoreResponse(
 		return err
 	}
 
-	return r.cache.Set(responseID, &Entry{
+	return r.cache.Set(responseID, &ResponseEntry{
 		Response: resp,
 		ReqTime:  reqTime,
 		RespTime: respTime,

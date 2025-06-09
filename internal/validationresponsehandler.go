@@ -39,7 +39,7 @@ type RevalidationContext struct {
 	URLKey         string
 	Start, End     time.Time
 	CCReq          CCRequestDirectives
-	StoredResponse *Entry
+	StoredResponse *ResponseEntry
 	StoredHeaders  HeaderEntries
 	Freshness      *Freshness
 }

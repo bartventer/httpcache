@@ -29,8 +29,8 @@ func (m *MockCache) Delete(key string) error {
 var _ ResponseCache = (*MockResponseCache)(nil)
 
 type MockResponseCache struct {
-	GetFunc        func(key string, req *http.Request) (*Entry, error)
-	SetFunc        func(key string, entry *Entry) error
+	GetFunc        func(key string, req *http.Request) (*ResponseEntry, error)
+	SetFunc        func(key string, entry *ResponseEntry) error
 	DeleteFunc     func(key string) error
 	GetHeadersFunc func(key string) (HeaderEntries, error)
 	SetHeadersFunc func(key string, headers HeaderEntries) error
@@ -46,10 +46,10 @@ func (m *MockResponseCache) SetHeaders(key string, headers HeaderEntries) error 
 	return m.SetHeadersFunc(key, headers)
 }
 
-func (m *MockResponseCache) Get(key string, req *http.Request) (*Entry, error) {
+func (m *MockResponseCache) Get(key string, req *http.Request) (*ResponseEntry, error) {
 	return m.GetFunc(key, req)
 }
-func (m *MockResponseCache) Set(key string, entry *Entry) error {
+func (m *MockResponseCache) Set(key string, entry *ResponseEntry) error {
 	return m.SetFunc(key, entry)
 }
 func (m *MockResponseCache) Delete(key string) error {
@@ -109,7 +109,7 @@ type MockFreshnessCalculator struct {
 }
 
 func (m *MockFreshnessCalculator) CalculateFreshness(
-	resp *Entry,
+	resp *ResponseEntry,
 	reqCC CCRequestDirectives,
 	resCC CCResponseDirectives,
 ) *Freshness {
