@@ -27,7 +27,7 @@ func newTestRoundTripper(fields func(rt *roundTripper)) *roundTripper {
 			IsRequestMethodUnderstoodFunc: func(req *http.Request) bool { return true },
 		},
 		vmc: &internal.MockVaryMatcher{
-			VaryHeadersMatchFunc: func(cachedHdrs internal.HeaderEntries, reqHdr http.Header) (int, bool) {
+			VaryHeadersMatchFunc: func(cachedHdrs internal.VaryHeaderEntries, reqHdr http.Header) (int, bool) {
 				return 0, true
 			},
 		},
@@ -91,7 +91,7 @@ func TestRoundTripper_CacheMissAndStore(t *testing.T) {
 			},
 		)
 		rt.rs = &internal.MockResponseStorer{
-			StoreResponseFunc: func(resp *http.Response, key string, headers internal.HeaderEntries, reqTime, respTime time.Time) error {
+			StoreResponseFunc: func(resp *http.Response, key string, headers internal.VaryHeaderEntries, reqTime, respTime time.Time) error {
 				return nil
 			},
 		}
@@ -121,8 +121,8 @@ func TestRoundTripper_CacheHit(t *testing.T) {
 		RespTime: time.Now(),
 	}
 	mockRespCache := &internal.MockResponseCache{
-		GetHeadersFunc: func(key string) (internal.HeaderEntries, error) {
-			return internal.HeaderEntries{{}}, nil
+		GetHeadersFunc: func(key string) (internal.VaryHeaderEntries, error) {
+			return internal.VaryHeaderEntries{{}}, nil
 		},
 		GetFunc:    func(key string, req *http.Request) (*internal.ResponseEntry, error) { return storedEntry, nil },
 		SetFunc:    func(key string, entry *internal.ResponseEntry) error { return nil },
@@ -156,8 +156,8 @@ func TestRoundTripper_CacheHit_Immutable(t *testing.T) {
 	rt := newTestRoundTripper(func(rt *roundTripper) {
 		rt.cache = &internal.MockResponseCache{
 			GetFunc: func(key string, req *http.Request) (*internal.ResponseEntry, error) { return storedEntry, nil },
-			GetHeadersFunc: func(key string) (internal.HeaderEntries, error) {
-				return internal.HeaderEntries{{}}, nil
+			GetHeadersFunc: func(key string) (internal.VaryHeaderEntries, error) {
+				return internal.VaryHeaderEntries{{}}, nil
 			},
 		}
 		rt.fc = &internal.MockFreshnessCalculator{
@@ -195,8 +195,8 @@ func TestRoundTripper_CacheHit_MustRevalidate_Stale(t *testing.T) {
 	rt := newTestRoundTripper(func(rt *roundTripper) {
 		rt.cache = &internal.MockResponseCache{
 			GetFunc: func(key string, req *http.Request) (*internal.ResponseEntry, error) { return storedEntry, nil },
-			GetHeadersFunc: func(key string) (internal.HeaderEntries, error) {
-				return internal.HeaderEntries{{}}, nil
+			GetHeadersFunc: func(key string) (internal.VaryHeaderEntries, error) {
+				return internal.VaryHeaderEntries{{}}, nil
 			},
 		}
 		rt.fc = &internal.MockFreshnessCalculator{
@@ -235,8 +235,8 @@ func TestRoundTripper_CacheHit_NoCacheUnqualified(t *testing.T) {
 	rt := newTestRoundTripper(func(rt *roundTripper) {
 		rt.cache = &internal.MockResponseCache{
 			GetFunc: func(key string, req *http.Request) (*internal.ResponseEntry, error) { return storedEntry, nil },
-			GetHeadersFunc: func(key string) (internal.HeaderEntries, error) {
-				return internal.HeaderEntries{{}}, nil
+			GetHeadersFunc: func(key string) (internal.VaryHeaderEntries, error) {
+				return internal.VaryHeaderEntries{{}}, nil
 			},
 		}
 		rt.vh = &internal.MockValidationResponseHandler{
@@ -273,8 +273,8 @@ func TestRoundTripper_CacheHit_NoCacheQualified_StripsFields(t *testing.T) {
 	rt := newTestRoundTripper(func(rt *roundTripper) {
 		rt.cache = &internal.MockResponseCache{
 			GetFunc: func(key string, req *http.Request) (*internal.ResponseEntry, error) { return storedEntry, nil },
-			GetHeadersFunc: func(key string) (internal.HeaderEntries, error) {
-				return internal.HeaderEntries{{}}, nil
+			GetHeadersFunc: func(key string) (internal.VaryHeaderEntries, error) {
+				return internal.VaryHeaderEntries{{}}, nil
 			},
 		}
 	})
@@ -309,7 +309,7 @@ func TestRoundTripper_NotUnderstoodAndUnsafeMethod(t *testing.T) {
 	invalidateCalled := false
 	rt := newTestRoundTripper(func(rt *roundTripper) {
 		rt.cache = &internal.MockResponseCache{
-			GetHeadersFunc: func(key string) (internal.HeaderEntries, error) {
+			GetHeadersFunc: func(key string) (internal.VaryHeaderEntries, error) {
 				return nil, nil
 			},
 		}
@@ -317,7 +317,7 @@ func TestRoundTripper_NotUnderstoodAndUnsafeMethod(t *testing.T) {
 			IsRequestMethodUnderstoodFunc: func(req *http.Request) bool { return false },
 		}
 		rt.ci = &internal.MockCacheInvalidator{
-			InvalidateCacheFunc: func(reqURL *url.URL, respHeader http.Header, headers internal.HeaderEntries, key string) {
+			InvalidateCacheFunc: func(reqURL *url.URL, respHeader http.Header, headers internal.VaryHeaderEntries, key string) {
 				invalidateCalled = true
 			},
 		}
@@ -370,8 +370,8 @@ func TestRoundTripper_NonErrorStatusInvalidation(t *testing.T) {
 	invalidateCalled := false
 	rt := newTestRoundTripper(func(rt *roundTripper) {
 		rt.cache = &internal.MockResponseCache{
-			GetHeadersFunc: func(key string) (internal.HeaderEntries, error) {
-				return internal.HeaderEntries{{}}, nil
+			GetHeadersFunc: func(key string) (internal.VaryHeaderEntries, error) {
+				return internal.VaryHeaderEntries{{}}, nil
 			},
 		}
 		rt.rmc = &internal.MockRequestMethodChecker{
@@ -387,7 +387,7 @@ func TestRoundTripper_NonErrorStatusInvalidation(t *testing.T) {
 			},
 		}
 		rt.ci = &internal.MockCacheInvalidator{
-			InvalidateCacheFunc: func(reqURL *url.URL, respHeader http.Header, headers internal.HeaderEntries, key string) {
+			InvalidateCacheFunc: func(reqURL *url.URL, respHeader http.Header, headers internal.VaryHeaderEntries, key string) {
 				invalidateCalled = true
 			},
 		}
@@ -426,12 +426,12 @@ func TestRoundTripper_OnlyIfCached504(t *testing.T) {
 			GetFunc: func(key string, req *http.Request) (*internal.ResponseEntry, error) {
 				return nil, errors.New("cache miss")
 			},
-			GetHeadersFunc: func(key string) (internal.HeaderEntries, error) {
-				return internal.HeaderEntries{{}}, nil
+			GetHeadersFunc: func(key string) (internal.VaryHeaderEntries, error) {
+				return internal.VaryHeaderEntries{{}}, nil
 			},
 		}
 		rt.vmc = &internal.MockVaryMatcher{
-			VaryHeadersMatchFunc: func(cachedHdrs internal.HeaderEntries, reqHdr http.Header) (int, bool) {
+			VaryHeadersMatchFunc: func(cachedHdrs internal.VaryHeaderEntries, reqHdr http.Header) (int, bool) {
 				return 0, true
 			},
 		}
@@ -450,12 +450,12 @@ func TestRoundTripper_CacheMissWithError(t *testing.T) {
 			GetFunc: func(key string, req *http.Request) (*internal.ResponseEntry, error) {
 				return nil, errors.New("cache miss")
 			},
-			GetHeadersFunc: func(key string) (internal.HeaderEntries, error) {
-				return internal.HeaderEntries{{}}, nil
+			GetHeadersFunc: func(key string) (internal.VaryHeaderEntries, error) {
+				return internal.VaryHeaderEntries{{}}, nil
 			},
 		}
 		rt.vmc = &internal.MockVaryMatcher{
-			VaryHeadersMatchFunc: func(cachedHdrs internal.HeaderEntries, reqHdr http.Header) (int, bool) {
+			VaryHeadersMatchFunc: func(cachedHdrs internal.VaryHeaderEntries, reqHdr http.Header) (int, bool) {
 				return 0, true
 			},
 		}
@@ -487,12 +487,12 @@ func TestRoundTripper_RevalidationPath(t *testing.T) {
 	rt := newTestRoundTripper(func(rt *roundTripper) {
 		rt.cache = &internal.MockResponseCache{
 			GetFunc: func(key string, req *http.Request) (*internal.ResponseEntry, error) { return storedEntry, nil },
-			GetHeadersFunc: func(key string) (internal.HeaderEntries, error) {
-				return internal.HeaderEntries{{}}, nil
+			GetHeadersFunc: func(key string) (internal.VaryHeaderEntries, error) {
+				return internal.VaryHeaderEntries{{}}, nil
 			},
 		}
 		rt.vmc = &internal.MockVaryMatcher{
-			VaryHeadersMatchFunc: func(cachedHdrs internal.HeaderEntries, reqHdr http.Header) (int, bool) {
+			VaryHeadersMatchFunc: func(cachedHdrs internal.VaryHeaderEntries, reqHdr http.Header) (int, bool) {
 				return 0, true
 			},
 		}
@@ -553,12 +553,12 @@ func TestRoundTripper_SWR_NormalPath(t *testing.T) {
 	rt := newTestRoundTripper(func(rt *roundTripper) {
 		rt.cache = &internal.MockResponseCache{
 			GetFunc: func(key string, req *http.Request) (*internal.ResponseEntry, error) { return storedEntry, nil },
-			GetHeadersFunc: func(key string) (internal.HeaderEntries, error) {
-				return internal.HeaderEntries{{}}, nil
+			GetHeadersFunc: func(key string) (internal.VaryHeaderEntries, error) {
+				return internal.VaryHeaderEntries{{}}, nil
 			},
 		}
 		rt.vmc = &internal.MockVaryMatcher{
-			VaryHeadersMatchFunc: func(cachedHdrs internal.HeaderEntries, reqHdr http.Header) (int, bool) {
+			VaryHeadersMatchFunc: func(cachedHdrs internal.VaryHeaderEntries, reqHdr http.Header) (int, bool) {
 				return 0, true
 			},
 		}
@@ -626,12 +626,12 @@ func TestRoundTripper_SWR_NormalPathAndError(t *testing.T) {
 	rt := newTestRoundTripper(func(rt *roundTripper) {
 		rt.cache = &internal.MockResponseCache{
 			GetFunc: func(key string, req *http.Request) (*internal.ResponseEntry, error) { return storedEntry, nil },
-			GetHeadersFunc: func(key string) (internal.HeaderEntries, error) {
-				return internal.HeaderEntries{{}}, nil
+			GetHeadersFunc: func(key string) (internal.VaryHeaderEntries, error) {
+				return internal.VaryHeaderEntries{{}}, nil
 			},
 		}
 		rt.vmc = &internal.MockVaryMatcher{
-			VaryHeadersMatchFunc: func(cachedHdrs internal.HeaderEntries, reqHdr http.Header) (int, bool) {
+			VaryHeadersMatchFunc: func(cachedHdrs internal.VaryHeaderEntries, reqHdr http.Header) (int, bool) {
 				return 0, true
 			},
 		}
@@ -693,12 +693,12 @@ func TestRoundTripper_SWR_Timeout(t *testing.T) {
 	rt := newTestRoundTripper(func(rt *roundTripper) {
 		rt.cache = &internal.MockResponseCache{
 			GetFunc: func(key string, req *http.Request) (*internal.ResponseEntry, error) { return storedEntry, nil },
-			GetHeadersFunc: func(key string) (internal.HeaderEntries, error) {
-				return internal.HeaderEntries{{}}, nil
+			GetHeadersFunc: func(key string) (internal.VaryHeaderEntries, error) {
+				return internal.VaryHeaderEntries{{}}, nil
 			},
 		}
 		rt.vmc = &internal.MockVaryMatcher{
-			VaryHeadersMatchFunc: func(cachedHdrs internal.HeaderEntries, reqHdr http.Header) (int, bool) {
+			VaryHeadersMatchFunc: func(cachedHdrs internal.VaryHeaderEntries, reqHdr http.Header) (int, bool) {
 				return 0, true
 			},
 		}

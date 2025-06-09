@@ -8,7 +8,7 @@ import (
 // CacheInvalidator describes the interface implemented by types that can invalidate cache entries
 // based on request and response headers, as specified in RFC 9111 §4.4.
 type CacheInvalidator interface {
-	InvalidateCache(reqURL *url.URL, respHeader http.Header, headers HeaderEntries, key string)
+	InvalidateCache(reqURL *url.URL, respHeader http.Header, headers VaryHeaderEntries, key string)
 }
 
 type cacheInvalidator struct {
@@ -23,12 +23,12 @@ func NewCacheInvalidator(cache ResponseCache, cke URLKeyer) *cacheInvalidator {
 func (r *cacheInvalidator) InvalidateCache(
 	reqURL *url.URL,
 	respHeader http.Header,
-	headers HeaderEntries,
+	headers VaryHeaderEntries,
 	key string,
 ) {
 	_ = r.cache.Delete(key)
 	if len(headers) > 0 {
-		for _, h := range headers.Keys() {
+		for _, h := range headers.ResponseIDs() {
 			_ = r.cache.Delete(h)
 		}
 	}
@@ -53,7 +53,7 @@ func (r *cacheInvalidator) invalidateLocationHeaders(reqURL *url.URL, respHeader
 			locKey := r.cke.URLKey(locURL)
 			headers, _ := r.cache.GetHeaders(locKey)
 			if len(headers) > 0 {
-				for _, h := range headers.Keys() {
+				for _, h := range headers.ResponseIDs() {
 					_ = r.cache.Delete(h)
 				}
 			}

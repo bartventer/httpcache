@@ -21,13 +21,13 @@ func (m *mockDeleterCache) Get(key string, req *http.Request) (*ResponseEntry, e
 	return nil, nil
 }
 func (m *mockDeleterCache) Set(key string, entry *ResponseEntry) error { return nil }
-func (m *mockDeleterCache) GetHeaders(key string) (HeaderEntries, error) {
+func (m *mockDeleterCache) GetHeaders(key string) (VaryHeaderEntries, error) {
 	if key == "loc" {
-		return HeaderEntries{&HeaderEntry{ResponseID: "loc"}}, nil
+		return VaryHeaderEntries{&VaryHeaderEntry{ResponseID: "loc"}}, nil
 	}
 	return nil, nil
 }
-func (m *mockDeleterCache) SetHeaders(key string, headers HeaderEntries) error {
+func (m *mockDeleterCache) SetHeaders(key string, headers VaryHeaderEntries) error {
 	return nil
 }
 
@@ -47,7 +47,7 @@ func Test_cacheInvalidator_InvalidateCache(t *testing.T) {
 		name           string
 		respHeaders    map[string]string
 		locationOrigin *url.URL
-		headers        HeaderEntries
+		headers        VaryHeaderEntries
 		expectDeletes  []string
 	}{
 		{
@@ -88,9 +88,9 @@ func Test_cacheInvalidator_InvalidateCache(t *testing.T) {
 			respHeaders: map[string]string{
 				"Location": "/bar",
 			},
-			headers: HeaderEntries{
-				&HeaderEntry{ResponseID: "header1"},
-				&HeaderEntry{ResponseID: "header2"},
+			headers: VaryHeaderEntries{
+				&VaryHeaderEntry{ResponseID: "header1"},
+				&VaryHeaderEntry{ResponseID: "header2"},
 			},
 			expectDeletes: []string{"main", "loc", "header1", "header2"},
 		},

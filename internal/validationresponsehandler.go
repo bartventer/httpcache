@@ -40,7 +40,7 @@ type RevalidationContext struct {
 	Start, End     time.Time
 	CCReq          CCRequestDirectives
 	StoredResponse *ResponseEntry
-	StoredHeaders  HeaderEntries
+	StoredHeaders  VaryHeaderEntries
 	Freshness      *Freshness
 }
 

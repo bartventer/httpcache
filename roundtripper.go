@@ -233,7 +233,7 @@ func (r *roundTripper) handleUnrecognizedMethod(
 func (r *roundTripper) handleCacheMiss(
 	req *http.Request,
 	urlKey string,
-	headers internal.HeaderEntries,
+	headers internal.VaryHeaderEntries,
 ) (*http.Response, error) {
 	ccReq := internal.ParseCCRequestDirectives(req.Header)
 	if ccReq.OnlyIfCached() {
@@ -255,7 +255,7 @@ func (r *roundTripper) handleCacheHit(
 	req *http.Request,
 	stored *internal.ResponseEntry,
 	urlKey string,
-	headers internal.HeaderEntries,
+	headers internal.VaryHeaderEntries,
 ) (*http.Response, error) {
 	ccReq := internal.ParseCCRequestDirectives(req.Header)
 	ccResp := internal.ParseCCResponseDirectives(stored.Response.Header)

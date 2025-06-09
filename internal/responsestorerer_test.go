@@ -26,7 +26,7 @@ func Test_responseStorer_StoreResponse(t *testing.T) {
 	type args struct {
 		resp              *http.Response
 		key               string
-		headers           HeaderEntries
+		headers           VaryHeaderEntries
 		reqTime, respTime time.Time
 	}
 	tests := []struct {
@@ -44,7 +44,7 @@ func Test_responseStorer_StoreResponse(t *testing.T) {
 						testutil.AssertNotNil(t, entry)
 						return nil
 					},
-					SetHeadersFunc: func(key string, headers HeaderEntries) error {
+					SetHeadersFunc: func(key string, headers VaryHeaderEntries) error {
 						testutil.AssertEqual(t, "test-key", key)
 						testutil.AssertTrue(t, len(headers) == 1)
 						return nil
@@ -89,7 +89,7 @@ func Test_responseStorer_StoreResponse(t *testing.T) {
 					SetFunc: func(key string, entry *ResponseEntry) error {
 						return nil
 					},
-					SetHeadersFunc: func(key string, headers HeaderEntries) error {
+					SetHeadersFunc: func(key string, headers VaryHeaderEntries) error {
 						testutil.AssertTrue(t, len(headers) == 2)
 						return nil
 					},
@@ -113,8 +113,8 @@ func Test_responseStorer_StoreResponse(t *testing.T) {
 					},
 				},
 				key: "test-key",
-				headers: HeaderEntries{
-					&HeaderEntry{
+				headers: VaryHeaderEntries{
+					&VaryHeaderEntry{
 						Vary:         "Accept",
 						VaryResolved: map[string]string{"Accept": "application/json"},
 						ResponseID:   "test-key#mock",
@@ -132,7 +132,7 @@ func Test_responseStorer_StoreResponse(t *testing.T) {
 			name: "SetHeaders returns error",
 			fields: fields{
 				cache: &MockResponseCache{
-					SetHeadersFunc: func(key string, headers HeaderEntries) error {
+					SetHeadersFunc: func(key string, headers VaryHeaderEntries) error {
 						return testutil.ErrSample
 					},
 				},
@@ -167,7 +167,7 @@ func Test_responseStorer_StoreResponse(t *testing.T) {
 			name: "Set returns error",
 			fields: fields{
 				cache: &MockResponseCache{
-					SetHeadersFunc: func(key string, headers HeaderEntries) error {
+					SetHeadersFunc: func(key string, headers VaryHeaderEntries) error {
 						return nil
 					},
 					SetFunc: func(key string, entry *ResponseEntry) error {
