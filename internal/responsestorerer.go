@@ -54,11 +54,11 @@ func (r *responseStorer) StoreResponse(
 	varyResolved := maps.Collect(
 		r.vhn.NormalizeVaryHeader(resp.Header.Get("Vary"), resp.Request.Header),
 	)
-	reponseID := r.vk.VaryKey(key, varyResolved)
+	responseID := r.vk.VaryKey(key, varyResolved)
 	headers = append(headers, &HeaderEntry{
 		Vary:         resp.Header.Get("Vary"),
 		VaryResolved: varyResolved,
-		ResponseID:   reponseID,
+		ResponseID:   responseID,
 		Timestamp:    resolveDate(resp.Header.Get("Date"), respTime),
 	})
 
@@ -66,7 +66,7 @@ func (r *responseStorer) StoreResponse(
 		return err
 	}
 
-	return r.cache.Set(reponseID, &Entry{
+	return r.cache.Set(responseID, &Entry{
 		Response: resp,
 		ReqTime:  reqTime,
 		RespTime: respTime,
