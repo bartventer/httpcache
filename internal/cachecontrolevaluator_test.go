@@ -3,7 +3,6 @@ package internal
 import (
 	"fmt"
 	"net/http"
-	"net/url"
 	"testing"
 	"time"
 
@@ -127,14 +126,6 @@ func Test_isHeuristicallyCacheableCode(t *testing.T) {
 			testutil.AssertTrue(t, !isHeuristicallyCacheableCode(code))
 		})
 	}
-}
-
-func mustParseURL(raw string) *url.URL {
-	u, err := url.Parse(raw)
-	if err != nil {
-		panic(err)
-	}
-	return u
 }
 
 type StaleIfErrorerFunc func() (time.Duration, bool)
