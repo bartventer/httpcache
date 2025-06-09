@@ -11,16 +11,16 @@ import (
 	"time"
 )
 
-// Entry represents a cached HTTP response entry.
-type Entry struct {
+// ResponseEntry represents a cached HTTP response entry.
+type ResponseEntry struct {
 	Response *http.Response // The HTTP response to cache
 	ReqTime  time.Time      // Timestamp of the request
 	RespTime time.Time      // Timestamp of the response
 }
 
-var _ encoding.BinaryMarshaler = (*Entry)(nil)
+var _ encoding.BinaryMarshaler = (*ResponseEntry)(nil)
 
-func (e Entry) MarshalBinary() ([]byte, error) {
+func (e ResponseEntry) MarshalBinary() ([]byte, error) {
 	reqTimeBytes, err := e.ReqTime.MarshalBinary()
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request time: %w", err)
@@ -49,7 +49,7 @@ var (
 	errInvalidResponse     = errors.New("invalid response")
 )
 
-func (e *Entry) UnmarshalBinaryWithRequest(data []byte, req *http.Request) error {
+func (e *ResponseEntry) UnmarshalBinaryWithRequest(data []byte, req *http.Request) error {
 	reader := bufio.NewReader(bytes.NewReader(data))
 
 	reqTimeLine, err := reader.ReadBytes('\n')

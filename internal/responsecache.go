@@ -15,8 +15,8 @@ type Cache = store.Cache
 // retrieve and set full cached responses, and manage headers associated
 // with a given URL key.
 type ResponseCache interface {
-	Get(responseKey string, req *http.Request) (*Entry, error)
-	Set(responseKey string, entry *Entry) error
+	Get(responseKey string, req *http.Request) (*ResponseEntry, error)
+	Set(responseKey string, entry *ResponseEntry) error
 	Delete(key string) error
 	GetHeaders(urlKey string) (HeaderEntries, error)
 	SetHeaders(urlKey string, headers HeaderEntries) error
@@ -32,19 +32,19 @@ func NewResponseCache(cache Cache) *responseCache {
 
 var _ ResponseCache = (*responseCache)(nil)
 
-func (r *responseCache) Get(responseKey string, req *http.Request) (*Entry, error) {
+func (r *responseCache) Get(responseKey string, req *http.Request) (*ResponseEntry, error) {
 	data, err := r.cache.Get(responseKey)
 	if err != nil {
 		return nil, err
 	}
-	entry := &Entry{}
+	entry := &ResponseEntry{}
 	if unmarshalErr := entry.UnmarshalBinaryWithRequest(data, req); unmarshalErr != nil {
 		return nil, fmt.Errorf("failed to unmarshal cached entry: %w", unmarshalErr)
 	}
 	return entry, nil
 }
 
-func (r *responseCache) Set(responseKey string, entry *Entry) error {
+func (r *responseCache) Set(responseKey string, entry *ResponseEntry) error {
 	data, err := entry.MarshalBinary()
 	if err != nil {
 		return fmt.Errorf("failed to marshal entry: %w", err)

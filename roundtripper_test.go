@@ -115,13 +115,17 @@ func TestRoundTripper_CacheHit(t *testing.T) {
 		Header:     http.Header{"Cache-Control": []string{"max-age=60"}},
 		Body:       http.NoBody,
 	}
-	storedEntry := &internal.Entry{Response: storedResp, ReqTime: time.Now(), RespTime: time.Now()}
+	storedEntry := &internal.ResponseEntry{
+		Response: storedResp,
+		ReqTime:  time.Now(),
+		RespTime: time.Now(),
+	}
 	mockRespCache := &internal.MockResponseCache{
 		GetHeadersFunc: func(key string) (internal.HeaderEntries, error) {
 			return internal.HeaderEntries{{}}, nil
 		},
-		GetFunc:    func(key string, req *http.Request) (*internal.Entry, error) { return storedEntry, nil },
-		SetFunc:    func(key string, entry *internal.Entry) error { return nil },
+		GetFunc:    func(key string, req *http.Request) (*internal.ResponseEntry, error) { return storedEntry, nil },
+		SetFunc:    func(key string, entry *internal.ResponseEntry) error { return nil },
 		DeleteFunc: func(key string) error { return nil },
 	}
 
@@ -143,11 +147,15 @@ func TestRoundTripper_CacheHit_Immutable(t *testing.T) {
 		Header:     http.Header{"Cache-Control": []string{"max-age=60, immutable"}},
 		Body:       http.NoBody,
 	}
-	storedEntry := &internal.Entry{Response: storedResp, ReqTime: time.Now(), RespTime: time.Now()}
+	storedEntry := &internal.ResponseEntry{
+		Response: storedResp,
+		ReqTime:  time.Now(),
+		RespTime: time.Now(),
+	}
 
 	rt := newTestRoundTripper(func(rt *roundTripper) {
 		rt.cache = &internal.MockResponseCache{
-			GetFunc: func(key string, req *http.Request) (*internal.Entry, error) { return storedEntry, nil },
+			GetFunc: func(key string, req *http.Request) (*internal.ResponseEntry, error) { return storedEntry, nil },
 			GetHeadersFunc: func(key string) (internal.HeaderEntries, error) {
 				return internal.HeaderEntries{{}}, nil
 			},
@@ -177,12 +185,16 @@ func TestRoundTripper_CacheHit_MustRevalidate_Stale(t *testing.T) {
 		Header:     http.Header{"Cache-Control": []string{"max-age=0, must-revalidate"}},
 		Body:       http.NoBody,
 	}
-	storedEntry := &internal.Entry{Response: storedResp, ReqTime: time.Now(), RespTime: time.Now()}
+	storedEntry := &internal.ResponseEntry{
+		Response: storedResp,
+		ReqTime:  time.Now(),
+		RespTime: time.Now(),
+	}
 	mockVHCalled := false
 
 	rt := newTestRoundTripper(func(rt *roundTripper) {
 		rt.cache = &internal.MockResponseCache{
-			GetFunc: func(key string, req *http.Request) (*internal.Entry, error) { return storedEntry, nil },
+			GetFunc: func(key string, req *http.Request) (*internal.ResponseEntry, error) { return storedEntry, nil },
 			GetHeadersFunc: func(key string) (internal.HeaderEntries, error) {
 				return internal.HeaderEntries{{}}, nil
 			},
@@ -213,12 +225,16 @@ func TestRoundTripper_CacheHit_NoCacheUnqualified(t *testing.T) {
 		Header:     http.Header{"Cache-Control": []string{"max-age=60, no-cache"}},
 		Body:       http.NoBody,
 	}
-	storedEntry := &internal.Entry{Response: storedResp, ReqTime: time.Now(), RespTime: time.Now()}
+	storedEntry := &internal.ResponseEntry{
+		Response: storedResp,
+		ReqTime:  time.Now(),
+		RespTime: time.Now(),
+	}
 	mockVHCalled := false
 
 	rt := newTestRoundTripper(func(rt *roundTripper) {
 		rt.cache = &internal.MockResponseCache{
-			GetFunc: func(key string, req *http.Request) (*internal.Entry, error) { return storedEntry, nil },
+			GetFunc: func(key string, req *http.Request) (*internal.ResponseEntry, error) { return storedEntry, nil },
 			GetHeadersFunc: func(key string) (internal.HeaderEntries, error) {
 				return internal.HeaderEntries{{}}, nil
 			},
@@ -248,11 +264,15 @@ func TestRoundTripper_CacheHit_NoCacheQualified_StripsFields(t *testing.T) {
 		},
 		Body: http.NoBody,
 	}
-	storedEntry := &internal.Entry{Response: storedResp, ReqTime: time.Now(), RespTime: time.Now()}
+	storedEntry := &internal.ResponseEntry{
+		Response: storedResp,
+		ReqTime:  time.Now(),
+		RespTime: time.Now(),
+	}
 
 	rt := newTestRoundTripper(func(rt *roundTripper) {
 		rt.cache = &internal.MockResponseCache{
-			GetFunc: func(key string, req *http.Request) (*internal.Entry, error) { return storedEntry, nil },
+			GetFunc: func(key string, req *http.Request) (*internal.ResponseEntry, error) { return storedEntry, nil },
 			GetHeadersFunc: func(key string) (internal.HeaderEntries, error) {
 				return internal.HeaderEntries{{}}, nil
 			},
@@ -403,7 +423,9 @@ func TestRoundTripper_NotUnderstoodAndRoundTripError(t *testing.T) {
 func TestRoundTripper_OnlyIfCached504(t *testing.T) {
 	rt := newTestRoundTripper(func(rt *roundTripper) {
 		rt.cache = &internal.MockResponseCache{
-			GetFunc: func(key string, req *http.Request) (*internal.Entry, error) { return nil, errors.New("cache miss") },
+			GetFunc: func(key string, req *http.Request) (*internal.ResponseEntry, error) {
+				return nil, errors.New("cache miss")
+			},
 			GetHeadersFunc: func(key string) (internal.HeaderEntries, error) {
 				return internal.HeaderEntries{{}}, nil
 			},
@@ -425,7 +447,9 @@ func TestRoundTripper_OnlyIfCached504(t *testing.T) {
 func TestRoundTripper_CacheMissWithError(t *testing.T) {
 	rt := newTestRoundTripper(func(rt *roundTripper) {
 		rt.cache = &internal.MockResponseCache{
-			GetFunc: func(key string, req *http.Request) (*internal.Entry, error) { return nil, errors.New("cache miss") },
+			GetFunc: func(key string, req *http.Request) (*internal.ResponseEntry, error) {
+				return nil, errors.New("cache miss")
+			},
 			GetHeadersFunc: func(key string) (internal.HeaderEntries, error) {
 				return internal.HeaderEntries{{}}, nil
 			},
@@ -453,12 +477,16 @@ func TestRoundTripper_RevalidationPath(t *testing.T) {
 		Header:     http.Header{"Cache-Control": []string{"max-age=0"}},
 		Body:       http.NoBody,
 	}
-	storedEntry := &internal.Entry{Response: storedResp, ReqTime: time.Now(), RespTime: time.Now()}
+	storedEntry := &internal.ResponseEntry{
+		Response: storedResp,
+		ReqTime:  time.Now(),
+		RespTime: time.Now(),
+	}
 	mockVHCalled := false
 
 	rt := newTestRoundTripper(func(rt *roundTripper) {
 		rt.cache = &internal.MockResponseCache{
-			GetFunc: func(key string, req *http.Request) (*internal.Entry, error) { return storedEntry, nil },
+			GetFunc: func(key string, req *http.Request) (*internal.ResponseEntry, error) { return storedEntry, nil },
 			GetHeadersFunc: func(key string) (internal.HeaderEntries, error) {
 				return internal.HeaderEntries{{}}, nil
 			},
@@ -516,7 +544,7 @@ func TestRoundTripper_SWR_NormalPath(t *testing.T) {
 		Header:     http.Header{"Cache-Control": []string{"max-age=0, stale-while-revalidate=15"}},
 		Body:       http.NoBody,
 	}
-	storedEntry := &internal.Entry{
+	storedEntry := &internal.ResponseEntry{
 		Response: storedResp,
 		ReqTime:  base.Add(-10 * time.Second),
 		RespTime: base.Add(-10 * time.Second),
@@ -524,7 +552,7 @@ func TestRoundTripper_SWR_NormalPath(t *testing.T) {
 	revalidateCalled := make(chan struct{}, 1)
 	rt := newTestRoundTripper(func(rt *roundTripper) {
 		rt.cache = &internal.MockResponseCache{
-			GetFunc: func(key string, req *http.Request) (*internal.Entry, error) { return storedEntry, nil },
+			GetFunc: func(key string, req *http.Request) (*internal.ResponseEntry, error) { return storedEntry, nil },
 			GetHeadersFunc: func(key string) (internal.HeaderEntries, error) {
 				return internal.HeaderEntries{{}}, nil
 			},
@@ -587,7 +615,7 @@ func TestRoundTripper_SWR_NormalPathAndError(t *testing.T) {
 		Header:     http.Header{"Cache-Control": []string{"max-age=0, stale-while-revalidate=15"}},
 		Body:       http.NoBody,
 	}
-	storedEntry := &internal.Entry{
+	storedEntry := &internal.ResponseEntry{
 		Response: storedResp,
 		ReqTime:  base.Add(-10 * time.Second),
 		RespTime: base.Add(-10 * time.Second),
@@ -597,7 +625,7 @@ func TestRoundTripper_SWR_NormalPathAndError(t *testing.T) {
 	revalidateCalled := make(chan struct{}, 1)
 	rt := newTestRoundTripper(func(rt *roundTripper) {
 		rt.cache = &internal.MockResponseCache{
-			GetFunc: func(key string, req *http.Request) (*internal.Entry, error) { return storedEntry, nil },
+			GetFunc: func(key string, req *http.Request) (*internal.ResponseEntry, error) { return storedEntry, nil },
 			GetHeadersFunc: func(key string) (internal.HeaderEntries, error) {
 				return internal.HeaderEntries{{}}, nil
 			},
@@ -654,7 +682,7 @@ func TestRoundTripper_SWR_Timeout(t *testing.T) {
 		Header:     http.Header{"Cache-Control": []string{"max-age=0, stale-while-revalidate=15"}},
 		Body:       http.NoBody,
 	}
-	storedEntry := &internal.Entry{
+	storedEntry := &internal.ResponseEntry{
 		Response: storedResp,
 		ReqTime:  base.Add(-10 * time.Second),
 		RespTime: base.Add(-10 * time.Second),
@@ -664,7 +692,7 @@ func TestRoundTripper_SWR_Timeout(t *testing.T) {
 	revalidateCalled := make(chan struct{}, 1)
 	rt := newTestRoundTripper(func(rt *roundTripper) {
 		rt.cache = &internal.MockResponseCache{
-			GetFunc: func(key string, req *http.Request) (*internal.Entry, error) { return storedEntry, nil },
+			GetFunc: func(key string, req *http.Request) (*internal.ResponseEntry, error) { return storedEntry, nil },
 			GetHeadersFunc: func(key string) (internal.HeaderEntries, error) {
 				return internal.HeaderEntries{{}}, nil
 			},

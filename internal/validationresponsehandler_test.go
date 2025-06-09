@@ -23,7 +23,7 @@ func Test_validationResponseHandler_HandleValidationResponse(t *testing.T) {
 		},
 		Body: http.NoBody,
 	}
-	storedEntry := &Entry{Response: storedResp, ReqTime: base, RespTime: base}
+	storedEntry := &ResponseEntry{Response: storedResp, ReqTime: base, RespTime: base}
 	ctx := RevalidationContext{
 		URLKey:         "key",
 		Start:          base,

@@ -24,7 +24,7 @@ func Test_responseCache_Get(t *testing.T) {
 		name      string
 		fields    fields
 		args      args
-		want      *Entry
+		want      *ResponseEntry
 		assertion func(tt *testing.T, err error, i ...interface{}) bool
 	}{
 		{
@@ -51,7 +51,7 @@ func Test_responseCache_Get(t *testing.T) {
 				key: "test-key",
 				req: &http.Request{},
 			},
-			want: &Entry{
+			want: &ResponseEntry{
 				Response: &http.Response{
 					StatusCode: http.StatusOK,
 					Header:     http.Header{"Content-Length": []string{"0"}},
@@ -137,7 +137,7 @@ func Test_responseCache_Set(t *testing.T) {
 	}
 	type args struct {
 		key   string
-		entry *Entry
+		entry *ResponseEntry
 	}
 	tests := []struct {
 		name      string
@@ -156,7 +156,7 @@ func Test_responseCache_Set(t *testing.T) {
 			},
 			args: args{
 				key: "test-key",
-				entry: &Entry{
+				entry: &ResponseEntry{
 					Response: &http.Response{
 						StatusCode: http.StatusOK,
 						Header:     http.Header{"Content-Length": []string{"0"}},

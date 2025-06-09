@@ -153,7 +153,7 @@ func Test_freshnessCalculator_CalculateFreshness(t *testing.T) {
 	tests := []struct {
 		name  string
 		clock Clock
-		entry *Entry
+		entry *ResponseEntry
 		reqCC map[string]string
 		resCC map[string]string
 		want  *Freshness
@@ -161,7 +161,7 @@ func Test_freshnessCalculator_CalculateFreshness(t *testing.T) {
 		{
 			name:  "Request with Max-Age=0",
 			clock: &MockClock{NowResult: base.Add(30 * time.Second)},
-			entry: &Entry{
+			entry: &ResponseEntry{
 				Response: fakeResponse(base.Add(10*time.Second), http.Header{}),
 				RespTime: base.Add(10 * time.Second),
 				ReqTime:  base.Add(5 * time.Second),
@@ -180,7 +180,7 @@ func Test_freshnessCalculator_CalculateFreshness(t *testing.T) {
 				NowResult:   base.Add(30 * time.Second),
 				SinceResult: time.Second * 20,
 			},
-			entry: &Entry{
+			entry: &ResponseEntry{
 				Response: fakeResponse(base.Add(10*time.Second), http.Header{}),
 				RespTime: base.Add(10 * time.Second),
 				ReqTime:  base.Add(10 * time.Second),
@@ -199,7 +199,7 @@ func Test_freshnessCalculator_CalculateFreshness(t *testing.T) {
 				NowResult:   base.Add(30 * time.Second),
 				SinceResult: time.Second * 20,
 			},
-			entry: &Entry{
+			entry: &ResponseEntry{
 				Response: fakeResponse(base.Add(10*time.Second), http.Header{
 					"Expires": {base.Add(60 * time.Second).UTC().Format(http.TimeFormat)},
 					"Date":    {""}, // Simulate missing Date header
@@ -221,7 +221,7 @@ func Test_freshnessCalculator_CalculateFreshness(t *testing.T) {
 				NowResult:   base.Add(30 * time.Second),
 				SinceResult: time.Second * 20,
 			},
-			entry: &Entry{
+			entry: &ResponseEntry{
 				Response: fakeResponse(base.Add(10*time.Second), http.Header{}),
 				RespTime: base.Add(10 * time.Second),
 				ReqTime:  base.Add(10 * time.Second),
@@ -240,7 +240,7 @@ func Test_freshnessCalculator_CalculateFreshness(t *testing.T) {
 				NowResult:   base.Add(60 * time.Second),
 				SinceResult: time.Second * 50,
 			},
-			entry: &Entry{
+			entry: &ResponseEntry{
 				Response: fakeResponse(base.Add(10*time.Second), http.Header{}),
 				RespTime: base.Add(10 * time.Second),
 				ReqTime:  base.Add(10 * time.Second),
@@ -259,7 +259,7 @@ func Test_freshnessCalculator_CalculateFreshness(t *testing.T) {
 				NowResult:   base.Add(15 * time.Second),
 				SinceResult: time.Second * 5,
 			},
-			entry: &Entry{
+			entry: &ResponseEntry{
 				Response: fakeResponse(base.Add(10*time.Second), http.Header{
 					"Last-Modified": {base.Add(-50 * time.Second).UTC().Format(time.RFC850)},
 				}),
@@ -283,7 +283,7 @@ func Test_freshnessCalculator_CalculateFreshness(t *testing.T) {
 				NowResult:   base.Add(30 * time.Second),
 				SinceResult: time.Second * 20,
 			},
-			entry: &Entry{
+			entry: &ResponseEntry{
 				Response: fakeResponse(base.Add(10*time.Second), http.Header{}),
 				RespTime: base.Add(10 * time.Second),
 				ReqTime:  base.Add(10 * time.Second),
@@ -302,7 +302,7 @@ func Test_freshnessCalculator_CalculateFreshness(t *testing.T) {
 				NowResult:   base.Add(40 * time.Second),
 				SinceResult: time.Second * 30,
 			},
-			entry: &Entry{
+			entry: &ResponseEntry{
 				Response: fakeResponse(base.Add(10*time.Second), http.Header{}),
 				RespTime: base.Add(10 * time.Second),
 				ReqTime:  base.Add(10 * time.Second),
@@ -321,7 +321,7 @@ func Test_freshnessCalculator_CalculateFreshness(t *testing.T) {
 				NowResult:   base.Add(50 * time.Second),
 				SinceResult: time.Second * 40,
 			},
-			entry: &Entry{
+			entry: &ResponseEntry{
 				Response: fakeResponse(base.Add(10*time.Second), http.Header{}),
 				RespTime: base.Add(10 * time.Second),
 				ReqTime:  base.Add(10 * time.Second),
