@@ -7,9 +7,14 @@ import (
 	"strings"
 )
 
-func dateHeader(header http.Header) RawTime         { return RawTime(header.Get("Date")) }
-func expiresHeader(header http.Header) RawTime      { return RawTime(header.Get("Expires")) }
-func lastModifiedHeader(header http.Header) RawTime { return RawTime(header.Get("Last-Modified")) }
+func dateFromHeader(header http.Header) RawTime    { return RawTime(header.Get("Date")) }
+func expiresFromHeader(header http.Header) RawTime { return RawTime(header.Get("Expires")) }
+
+func lastModifiedFromHeader(
+	header http.Header,
+) RawTime {
+	return RawTime(header.Get("Last-Modified"))
+}
 
 func defaultPort(scheme string) string {
 	switch scheme {
@@ -68,14 +73,17 @@ func hopByHopHeaders(respHeader http.Header) map[string]struct{} {
 	return m
 }
 
-// RFC 9111 §3.1.
+// removeHopByHopHeaders removes hop-by-hop headers so that only
+// end-to-end headers remain in the response as per RFC 9111 §3.1.
 func removeHopByHopHeaders(resp *http.Response) {
 	for hdr := range hopByHopHeaders(resp.Header) {
 		delete(resp.Header, hdr)
 	}
 }
 
-// RFC 9111 §3.2.
+// updateStoredHeaders updates the stored response headers with the
+// headers from the revalidated response, excluding hop-by-hop headers
+// and the Content-Length header, as per RFC 9111 §3.2.
 func updateStoredHeaders(storedResp, resp *http.Response) {
 	omitted := hopByHopHeaders(resp.Header)
 	omitted["Content-Length"] = struct{}{}
