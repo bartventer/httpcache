@@ -1,9 +1,9 @@
 package internal
 
 import (
-	"bytes"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
@@ -24,7 +24,7 @@ func Test_responseCache_Get(t *testing.T) {
 		name      string
 		fields    fields
 		args      args
-		want      *ResponseEntry
+		want      *Response
 		assertion func(tt *testing.T, err error, i ...interface{}) bool
 	}{
 		{
@@ -32,18 +32,13 @@ func Test_responseCache_Get(t *testing.T) {
 			fields: fields{
 				cache: &MockCache{
 					GetFunc: func(key string) ([]byte, error) {
-						reqTime := time.Date(2023, 10, 1, 0, 0, 0, 0, time.UTC)
-						respTime := time.Date(2023, 10, 1, 0, 0, 1, 0, time.UTC)
-						reqTimeBytes, _ := reqTime.MarshalBinary()
-						respTimeBytes, _ := respTime.MarshalBinary()
-						respBytes := []byte("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
-						var buf bytes.Buffer
-						buf.Write(reqTimeBytes)
-						buf.WriteByte('\n')
-						buf.Write(respTimeBytes)
-						buf.WriteByte('\n')
-						buf.Write(respBytes)
-						return buf.Bytes(), nil
+						resp := &Response{
+							Data:        httptest.NewRecorder().Result(),
+							RequestedAt: time.Date(2023, 10, 1, 0, 0, 0, 0, time.UTC),
+							ReceivedAt:  time.Date(2023, 10, 1, 0, 0, 1, 0, time.UTC),
+							ID:          "test-key",
+						}
+						return resp.MarshalBinary()
 					},
 				},
 			},
@@ -51,14 +46,15 @@ func Test_responseCache_Get(t *testing.T) {
 				key: "test-key",
 				req: &http.Request{},
 			},
-			want: &ResponseEntry{
-				Response: &http.Response{
+			want: &Response{
+				Data: &http.Response{
 					StatusCode: http.StatusOK,
 					Header:     http.Header{"Content-Length": []string{"0"}},
 					Body:       http.NoBody,
 				},
-				ReqTime:  time.Date(2023, 10, 1, 0, 0, 0, 0, time.UTC),
-				RespTime: time.Date(2023, 10, 1, 0, 0, 1, 0, time.UTC),
+				RequestedAt: time.Date(2023, 10, 1, 0, 0, 0, 0, time.UTC),
+				ReceivedAt:  time.Date(2023, 10, 1, 0, 0, 1, 0, time.UTC),
+				ID:          "test-key",
 			},
 			assertion: func(tt *testing.T, err error, i ...interface{}) bool {
 				testutil.RequireNoError(tt, err)
@@ -116,13 +112,16 @@ func Test_responseCache_Get(t *testing.T) {
 			got, err := r.Get(tt.args.key, tt.args.req)
 			tt.assertion(t, err)
 			if tt.want != nil && got != nil {
-				testutil.AssertEqual(t, tt.want.Response.StatusCode, got.Response.StatusCode)
-				testutil.AssertTrue(t, tt.want.ReqTime.Equal(got.ReqTime), "ReqTime mismatch")
-				testutil.AssertTrue(t, tt.want.RespTime.Equal(got.RespTime), "RespTime mismatch")
-				testutil.AssertEqual(
+				testutil.AssertEqual(t, tt.want.Data.StatusCode, got.Data.StatusCode)
+				testutil.AssertTrue(
 					t,
-					tt.want.Response.Header.Get("Content-Length"),
-					got.Response.Header.Get("Content-Length"),
+					tt.want.RequestedAt.Equal(got.RequestedAt),
+					"ReqTime mismatch",
+				)
+				testutil.AssertTrue(
+					t,
+					tt.want.ReceivedAt.Equal(got.ReceivedAt),
+					"RespTime mismatch",
 				)
 			} else {
 				testutil.AssertNil(t, got)
@@ -137,7 +136,7 @@ func Test_responseCache_Set(t *testing.T) {
 	}
 	type args struct {
 		key   string
-		entry *ResponseEntry
+		entry *Response
 	}
 	tests := []struct {
 		name      string
@@ -156,14 +155,14 @@ func Test_responseCache_Set(t *testing.T) {
 			},
 			args: args{
 				key: "test-key",
-				entry: &ResponseEntry{
-					Response: &http.Response{
+				entry: &Response{
+					Data: &http.Response{
 						StatusCode: http.StatusOK,
 						Header:     http.Header{"Content-Length": []string{"0"}},
 						Body:       http.NoBody,
 					},
-					ReqTime:  time.Date(2023, 10, 1, 0, 0, 0, 0, time.UTC),
-					RespTime: time.Date(2023, 10, 1, 0, 0, 1, 0, time.UTC),
+					RequestedAt: time.Date(2023, 10, 1, 0, 0, 0, 0, time.UTC),
+					ReceivedAt:  time.Date(2023, 10, 1, 0, 0, 1, 0, time.UTC),
 				},
 			},
 			assertion: func(tt *testing.T, err error, i ...interface{}) bool {
@@ -234,14 +233,14 @@ func Test_responseCache_GetHeaders(t *testing.T) {
 		name      string
 		fields    fields
 		args      args
-		assertion func(tt *testing.T, got VaryHeaderEntries, err error, i ...interface{}) bool
+		assertion func(tt *testing.T, got ResponseRefs, err error, i ...interface{}) bool
 	}{
 		{
 			name: "successful get headers",
 			fields: fields{
 				cache: &MockCache{
 					GetFunc: func(key string) ([]byte, error) {
-						data := `[{"vary":"Accept","vary_resolved":{"Accept":"application/json"},"response_id":"https://example.com/test#1234567890","timestamp":"2023-10-01T00:00:00Z"}]`
+						data := `[{"vary":"Accept","vary_resolved":{"Accept":"application/json"},"id":"https://example.com/test#1234567890","received_at":"2023-10-01T00:00:00Z","etag":"W/\"1234567890\"","last_modified":"2023-10-01T00:00:00Z","deleted":false}]`
 						return []byte(data), nil
 					},
 				},
@@ -249,7 +248,7 @@ func Test_responseCache_GetHeaders(t *testing.T) {
 			args: args{
 				key: "test-key",
 			},
-			assertion: func(tt *testing.T, got VaryHeaderEntries, err error, i ...interface{}) bool {
+			assertion: func(tt *testing.T, got ResponseRefs, err error, i ...interface{}) bool {
 				testutil.RequireNoError(tt, err)
 				testutil.AssertNotNil(tt, got)
 				testutil.AssertTrue(tt, len(got) > 0, "Expected non-empty headers")
@@ -258,7 +257,7 @@ func Test_responseCache_GetHeaders(t *testing.T) {
 				testutil.AssertEqual(tt, got[0].ResponseID, "https://example.com/test#1234567890")
 				testutil.AssertTrue(
 					tt,
-					got[0].Timestamp.Equal(time.Date(2023, 10, 1, 0, 0, 0, 0, time.UTC)),
+					got[0].ReceivedAt.Equal(time.Date(2023, 10, 1, 0, 0, 0, 0, time.UTC)),
 					"Timestamp mismatch",
 				)
 				return true
@@ -276,7 +275,7 @@ func Test_responseCache_GetHeaders(t *testing.T) {
 			args: args{
 				key: "test-key",
 			},
-			assertion: func(tt *testing.T, got VaryHeaderEntries, err error, i ...interface{}) bool {
+			assertion: func(tt *testing.T, got ResponseRefs, err error, i ...interface{}) bool {
 				testutil.RequireErrorIs(tt, err, testutil.ErrSample)
 				testutil.AssertNil(tt, got)
 				return true
@@ -294,7 +293,7 @@ func Test_responseCache_GetHeaders(t *testing.T) {
 			args: args{
 				key: "test-key",
 			},
-			assertion: func(tt *testing.T, got VaryHeaderEntries, err error, i ...interface{}) bool {
+			assertion: func(tt *testing.T, got ResponseRefs, err error, i ...interface{}) bool {
 				var syntaxErr *json.SyntaxError
 				testutil.RequireErrorAs(tt, err, &syntaxErr)
 				testutil.AssertNil(tt, got)
@@ -307,7 +306,7 @@ func Test_responseCache_GetHeaders(t *testing.T) {
 			r := &responseCache{
 				cache: tt.fields.cache,
 			}
-			got, err := r.GetHeaders(tt.args.key)
+			got, err := r.GetRefs(tt.args.key)
 			tt.assertion(t, got, err)
 		})
 	}
@@ -319,7 +318,7 @@ func Test_responseCache_SetHeaders(t *testing.T) {
 	}
 	type args struct {
 		key     string
-		headers VaryHeaderEntries
+		headers ResponseRefs
 	}
 	tests := []struct {
 		name      string
@@ -338,12 +337,12 @@ func Test_responseCache_SetHeaders(t *testing.T) {
 			},
 			args: args{
 				key: "test-key",
-				headers: VaryHeaderEntries{
+				headers: ResponseRefs{
 					{
 						Vary:         "Accept",
 						VaryResolved: map[string]string{"Accept": "application/json"},
+						ReceivedAt:   time.Date(2023, 10, 1, 0, 0, 0, 0, time.UTC),
 						ResponseID:   "https://example.com/test#1234567890",
-						Timestamp:    time.Date(2023, 10, 1, 0, 0, 0, 0, time.UTC),
 					},
 				},
 			},
@@ -358,7 +357,7 @@ func Test_responseCache_SetHeaders(t *testing.T) {
 			r := &responseCache{
 				cache: tt.fields.cache,
 			}
-			err := r.SetHeaders(tt.args.key, tt.args.headers)
+			err := r.SetRefs(tt.args.key, tt.args.headers)
 			tt.assertion(t, err)
 		})
 	}

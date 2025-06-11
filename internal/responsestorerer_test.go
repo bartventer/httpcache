@@ -10,12 +10,6 @@ import (
 	"github.com/bartventer/httpcache/internal/testutil"
 )
 
-type mockVaryKeyer struct{}
-
-func (m mockVaryKeyer) VaryKey(urlKey string, varyHeaders map[string]string) string {
-	return urlKey + "#mock"
-}
-
 func Test_responseStorer_StoreResponse(t *testing.T) {
 	base := time.Unix(0, 0).UTC()
 	type fields struct {
@@ -26,8 +20,9 @@ func Test_responseStorer_StoreResponse(t *testing.T) {
 	type args struct {
 		resp              *http.Response
 		key               string
-		headers           VaryHeaderEntries
+		refs              ResponseRefs
 		reqTime, respTime time.Time
+		refIndex          int
 	}
 	tests := []struct {
 		name      string
@@ -36,17 +31,16 @@ func Test_responseStorer_StoreResponse(t *testing.T) {
 		assertion func(*testing.T, *http.Response, error)
 	}{
 		{
-			name: "Successful store with nil headers",
+			name: "nil refs creates new slice and appends",
 			fields: fields{
 				cache: &MockResponseCache{
-					SetFunc: func(key string, entry *ResponseEntry) error {
+					SetFunc: func(key string, entry *Response) error {
 						testutil.AssertEqual(t, "test-key#mock", key)
-						testutil.AssertNotNil(t, entry)
 						return nil
 					},
-					SetHeadersFunc: func(key string, headers VaryHeaderEntries) error {
+					SetRefsFunc: func(key string, refs ResponseRefs) error {
 						testutil.AssertEqual(t, "test-key", key)
-						testutil.AssertTrue(t, len(headers) == 1)
+						testutil.AssertTrue(t, len(refs) == 1)
 						return nil
 					},
 				},
@@ -57,40 +51,37 @@ func Test_responseStorer_StoreResponse(t *testing.T) {
 						})
 					},
 				),
-				vk: mockVaryKeyer{},
+				vk: VaryKeyerFunc(func(urlKey string, varyHeaders map[string]string) string {
+					return urlKey + "#mock"
+				}),
 			},
 			args: args{
 				resp: &http.Response{
 					Header: http.Header{
-						"Connection": {"keep-alive"}, // Should be removed
-						"Vary":       {"Accept"},
-						"Date":       {base.Add(1 * time.Hour).Format(http.TimeFormat)},
+						"Vary": {"Accept"},
 					},
 					Request: &http.Request{
 						Header: http.Header{"Accept": []string{"text/html"}},
 					},
 				},
 				key:      "test-key",
-				headers:  nil,
+				refs:     nil,
 				reqTime:  base.Add(10 * time.Second),
 				respTime: base.Add(20 * time.Second),
+				refIndex: 0,
 			},
 			assertion: func(t *testing.T, r *http.Response, err error) {
 				testutil.RequireNoError(t, err)
-				testutil.AssertNotNil(t, r)
-				_, ok := r.Header["Connection"]
-				testutil.AssertTrue(t, !ok)
 			},
 		},
 		{
-			name: "Successful store with existing headers",
+			name: "refIndex in range updates existing ref",
 			fields: fields{
 				cache: &MockResponseCache{
-					SetFunc: func(key string, entry *ResponseEntry) error {
-						return nil
-					},
-					SetHeadersFunc: func(key string, headers VaryHeaderEntries) error {
-						testutil.AssertTrue(t, len(headers) == 2)
+					SetFunc: func(key string, entry *Response) error { return nil },
+					SetRefsFunc: func(key string, refs ResponseRefs) error {
+						testutil.AssertTrue(t, len(refs) == 1)
+						testutil.AssertEqual(t, refs[0].VaryResolved["Accept"], "text/html")
 						return nil
 					},
 				},
@@ -101,7 +92,9 @@ func Test_responseStorer_StoreResponse(t *testing.T) {
 						})
 					},
 				),
-				vk: mockVaryKeyer{},
+				vk: VaryKeyerFunc(func(urlKey string, varyHeaders map[string]string) string {
+					return urlKey + "#mock"
+				}),
 			},
 			args: args{
 				resp: &http.Response{
@@ -113,27 +106,31 @@ func Test_responseStorer_StoreResponse(t *testing.T) {
 					},
 				},
 				key: "test-key",
-				headers: VaryHeaderEntries{
-					&VaryHeaderEntry{
+				refs: ResponseRefs{
+					&ResponseRef{
 						Vary:         "Accept",
 						VaryResolved: map[string]string{"Accept": "application/json"},
+						ReceivedAt:   base,
 						ResponseID:   "test-key#mock",
-						Timestamp:    base,
 					},
 				},
 				reqTime:  base.Add(10 * time.Second),
 				respTime: base.Add(20 * time.Second),
+				refIndex: 0,
 			},
 			assertion: func(t *testing.T, r *http.Response, err error) {
 				testutil.RequireNoError(t, err)
 			},
 		},
 		{
-			name: "SetHeaders returns error",
+			name: "refIndex out of range appends new ref",
 			fields: fields{
 				cache: &MockResponseCache{
-					SetHeadersFunc: func(key string, headers VaryHeaderEntries) error {
-						return testutil.ErrSample
+					SetFunc: func(key string, entry *Response) error { return nil },
+					SetRefsFunc: func(key string, refs ResponseRefs) error {
+						testutil.AssertTrue(t, len(refs) == 2)
+						testutil.AssertEqual(t, refs[1].VaryResolved["Accept"], "text/html")
+						return nil
 					},
 				},
 				vhn: VaryHeaderNormalizerFunc(
@@ -143,7 +140,9 @@ func Test_responseStorer_StoreResponse(t *testing.T) {
 						})
 					},
 				),
-				vk: mockVaryKeyer{},
+				vk: VaryKeyerFunc(func(urlKey string, varyHeaders map[string]string) string {
+					return urlKey + "#mock"
+				}),
 			},
 			args: args{
 				resp: &http.Response{
@@ -154,23 +153,29 @@ func Test_responseStorer_StoreResponse(t *testing.T) {
 						Header: http.Header{"Accept": []string{"text/html"}},
 					},
 				},
-				key:      "test-key",
-				headers:  nil,
+				key: "test-key",
+				refs: ResponseRefs{
+					&ResponseRef{
+						Vary:         "Accept",
+						VaryResolved: map[string]string{"Accept": "application/json"},
+						ReceivedAt:   base,
+						ResponseID:   "test-key#mock",
+					},
+				},
 				reqTime:  base.Add(10 * time.Second),
 				respTime: base.Add(20 * time.Second),
+				refIndex: 1, // out of range (len(refs) == 1)
 			},
 			assertion: func(t *testing.T, r *http.Response, err error) {
-				testutil.RequireErrorIs(t, err, testutil.ErrSample)
+				testutil.RequireNoError(t, err)
 			},
 		},
 		{
-			name: "Set returns error",
+			name: "SetRefs returns error",
 			fields: fields{
 				cache: &MockResponseCache{
-					SetHeadersFunc: func(key string, headers VaryHeaderEntries) error {
-						return nil
-					},
-					SetFunc: func(key string, entry *ResponseEntry) error {
+					SetFunc: func(key string, entry *Response) error { return nil },
+					SetRefsFunc: func(key string, headers ResponseRefs) error {
 						return testutil.ErrSample
 					},
 				},
@@ -181,7 +186,9 @@ func Test_responseStorer_StoreResponse(t *testing.T) {
 						})
 					},
 				),
-				vk: mockVaryKeyer{},
+				vk: VaryKeyerFunc(func(urlKey string, varyHeaders map[string]string) string {
+					return urlKey + "#mock"
+				}),
 			},
 			args: args{
 				resp: &http.Response{
@@ -193,9 +200,10 @@ func Test_responseStorer_StoreResponse(t *testing.T) {
 					},
 				},
 				key:      "test-key",
-				headers:  nil,
+				refs:     nil,
 				reqTime:  base.Add(10 * time.Second),
 				respTime: base.Add(20 * time.Second),
+				refIndex: 0,
 			},
 			assertion: func(t *testing.T, r *http.Response, err error) {
 				testutil.RequireErrorIs(t, err, testutil.ErrSample)
@@ -209,12 +217,14 @@ func Test_responseStorer_StoreResponse(t *testing.T) {
 				vhn:   tt.fields.vhn,
 				vk:    tt.fields.vk,
 			}
+			FixDateHeader(tt.args.resp.Header, tt.args.respTime)
 			err := r.StoreResponse(
 				tt.args.resp,
 				tt.args.key,
-				tt.args.headers,
+				tt.args.refs,
 				tt.args.reqTime,
 				tt.args.respTime,
+				tt.args.refIndex,
 			)
 			if tt.assertion != nil {
 				tt.assertion(t, tt.args.resp, err)

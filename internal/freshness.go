@@ -11,7 +11,6 @@ type Age struct {
 	Timestamp time.Time     // Time when the age was calculated
 }
 
-// Freshness represents the freshness status of a cached response.
 type Freshness struct {
 	IsStale    bool          // Whether the response is stale
 	Age        *Age          // Current age (seconds) of the response (RFC9111 §4.2.3)
@@ -21,7 +20,7 @@ type Freshness struct {
 // heuristicFreshness calculates freshness lifetime using heuristics (10% of (date - last-modified)),
 // per RFC9111 §4.2.2.
 func heuristicFreshness(h http.Header, date time.Time) time.Duration {
-	lastMod, ok := lastModifiedFromHeader(h).Value()
+	lastMod, ok := RawTime(h.Get("Last-Modified")).Value()
 	if !ok || !lastMod.Before(date) {
 		return 0
 	}
@@ -60,7 +59,7 @@ type FreshnessCalculator interface {
 	// CalculateFreshness calculates the freshness of a cached response
 	// based on the request and response cache control directives.
 	CalculateFreshness(
-		resp *ResponseEntry,
+		resp *Response,
 		reqCC CCRequestDirectives,
 		resCC CCResponseDirectives,
 	) *Freshness
@@ -79,14 +78,10 @@ type freshnessCalculator struct {
 //
 //nolint:cyclop // Cyclomatic complexity is high due to multiple conditions, but it's necessary for RFC compliance.
 func (f *freshnessCalculator) CalculateFreshness(
-	entry *ResponseEntry,
+	entry *Response,
 	reqCC CCRequestDirectives,
 	resCC CCResponseDirectives,
 ) *Freshness {
-	resp := entry.Response
-	respTime := entry.RespTime
-	reqTime := entry.ReqTime
-
 	if reqMaxAge, ok := reqCC.MaxAge(); ok && reqMaxAge == 0 {
 		return &Freshness{
 			IsStale:    true,
@@ -95,12 +90,15 @@ func (f *freshnessCalculator) CalculateFreshness(
 		}
 	}
 
-	date, ok := dateFromHeader(resp.Header).Value()
-	if !ok || date.IsZero() {
-		date = respTime // Fallback to response time if Date is missing
-	}
-
-	currentAge := calculateCurrentAge(f.clock, resp.Header, date, reqTime, respTime)
+	resp := entry.Data
+	date := entry.DateHeader()
+	currentAge := calculateCurrentAge(
+		f.clock,
+		resp.Header,
+		date,
+		entry.RequestedAt,
+		entry.ReceivedAt,
+	)
 
 	// Freshness lifetime (private cache: ignore s-maxage)
 	usefulLife := time.Duration(0)
@@ -108,7 +106,7 @@ func (f *freshnessCalculator) CalculateFreshness(
 		usefulLife = maxAge // Response is fresh for max-age seconds
 	}
 	if usefulLife == 0 {
-		if expires, ok := expiresFromHeader(resp.Header).Value(); ok && expires.After(date) {
+		if expires, ok := entry.ExpiresHeader().Value(); ok && expires.After(date) {
 			usefulLife = expires.Sub(date)
 		}
 	}

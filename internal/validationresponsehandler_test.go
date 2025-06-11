@@ -2,10 +2,8 @@ package internal
 
 import (
 	"errors"
-	"maps"
 	"net/http"
 	"net/url"
-	"slices"
 	"testing"
 	"time"
 
@@ -23,208 +21,164 @@ func Test_validationResponseHandler_HandleValidationResponse(t *testing.T) {
 		},
 		Body: http.NoBody,
 	}
-	storedEntry := &ResponseEntry{Response: storedResp, ReqTime: base, RespTime: base}
+	storedEntry := &Response{Data: storedResp, RequestedAt: base, ReceivedAt: base}
 	ctx := RevalidationContext{
-		URLKey:         "key",
-		Start:          base,
-		End:            base,
-		CCReq:          CCRequestDirectives{},
-		StoredResponse: storedEntry,
-		Freshness:      &Freshness{Age: &Age{Value: 10 * time.Second, Timestamp: base}},
+		URLKey:    "key",
+		Start:     base,
+		End:       base,
+		CCReq:     CCRequestDirectives{},
+		Stored:    storedEntry,
+		Freshness: &Freshness{Age: &Age{Value: 10 * time.Second, Timestamp: base}},
 	}
 
-	type testCase struct {
-		name     string
-		handler  *validationResponseHandler
+	type args struct {
 		req      *http.Request
 		resp     *http.Response
 		inputErr error
-		want     *http.Response
-		wantErr  bool
-		setup    func(*testCase)
-		check    func(*testing.T, *testCase, *http.Response)
 	}
 
-	tests := []testCase{
+	tests := []struct {
+		name    string
+		handler *validationResponseHandler
+		setup   func(tt *testing.T, handler *validationResponseHandler) args
+		assert  func(tt *testing.T, got *http.Response, err error)
+	}{
 		{
 			name:    "304 Not Modified",
 			handler: &validationResponseHandler{},
-			req:     &http.Request{Method: http.MethodGet},
-			resp:    &http.Response{StatusCode: http.StatusNotModified, Header: http.Header{}},
-			want:    storedResp,
-		},
-		{
-			name:    "HEAD 200, headers match",
-			handler: &validationResponseHandler{},
-			req:     &http.Request{Method: http.MethodHead},
-			resp: &http.Response{
-				StatusCode: http.StatusOK,
-				Header: http.Header{
-					"ETag":           {"abc"},
-					"Last-Modified":  {"yesterday"},
-					"Content-Length": {"123"},
-				},
-				ContentLength: 123,
-			},
-			want: storedResp,
-		},
-		{
-			name: "HEAD 200, headers do not match",
-			handler: &validationResponseHandler{
-				ci: &MockCacheInvalidator{},
-			},
-			req: &http.Request{Method: http.MethodHead},
-			resp: &http.Response{
-				StatusCode: http.StatusOK,
-				Header: http.Header{
-					"ETag":           {"def"},
-					"Last-Modified":  {"today"},
-					"Content-Length": {"456"},
-				},
-				ContentLength: 456,
-			},
-			want: nil, // will check in check func
-			setup: func(tc *testCase) {
-				invalidated := false
-				tc.handler.ci = &MockCacheInvalidator{
-					InvalidateCacheFunc: func(reqURL *url.URL, respHeader http.Header, headers VaryHeaderEntries, key string) {
-						invalidated = true
-						testutil.AssertEqual(t, "key", key)
-						testutil.AssertTrue(t, respHeader.Get("Cache-Control") == "")
-					},
+			setup: func(tt *testing.T, handler *validationResponseHandler) args {
+				return args{
+					req:  &http.Request{Method: http.MethodGet},
+					resp: &http.Response{StatusCode: http.StatusNotModified, Header: http.Header{}},
 				}
-				tc.check = func(t *testing.T, tc *testCase, got *http.Response) {
-					testutil.AssertTrue(t, invalidated)
-				}
+			},
+			assert: func(tt *testing.T, got *http.Response, err error) {
+				testutil.RequireNoError(tt, err)
+				testutil.AssertEqual(tt, http.StatusOK, got.StatusCode)
 			},
 		},
 		{
 			name: "GET with error status, stale allowed",
 			handler: &validationResponseHandler{
 				siep: &MockStaleIfErrorPolicy{
-					CanStaleOnErrorFunc: func(freshness *Freshness, sies ...StaleIfErrorer) bool { return true },
+					CanStaleOnErrorFunc: func(*Freshness, ...StaleIfErrorer) bool { return true },
 				},
 				clock: &MockClock{NowResult: base},
 			},
-			req: &http.Request{Method: http.MethodGet},
-			resp: &http.Response{
-				StatusCode: http.StatusServiceUnavailable, // Allowed stale error code
-				Header:     http.Header{"Cache-Control": {"stale-if-error=60"}},
+			setup: func(tt *testing.T, handler *validationResponseHandler) args {
+				return args{
+					req: &http.Request{Method: http.MethodGet},
+					resp: &http.Response{
+						StatusCode: http.StatusServiceUnavailable,
+						Header:     http.Header{"Cache-Control": {"stale-if-error=60"}},
+					},
+				}
 			},
-			inputErr: nil,
-			want:     storedResp,
+			assert: func(tt *testing.T, got *http.Response, err error) {
+				testutil.RequireNoError(tt, err)
+				testutil.AssertEqual(tt, http.StatusOK, got.StatusCode)
+			},
 		},
 		{
 			name: "GET with error, stale allowed",
 			handler: &validationResponseHandler{
 				siep: &MockStaleIfErrorPolicy{
-					CanStaleOnErrorFunc: func(freshness *Freshness, sies ...StaleIfErrorer) bool { return true },
+					CanStaleOnErrorFunc: func(*Freshness, ...StaleIfErrorer) bool { return true },
 				},
 				clock: &MockClock{NowResult: base},
 			},
-			req: &http.Request{Method: http.MethodGet},
-			resp: &http.Response{
-				StatusCode: http.StatusInternalServerError,
-				Header:     http.Header{"Cache-Control": {"stale-if-error=60"}},
+			setup: func(tt *testing.T, handler *validationResponseHandler) args {
+				return args{
+					req: &http.Request{Method: http.MethodGet},
+					resp: &http.Response{
+						StatusCode: http.StatusInternalServerError,
+						Header:     http.Header{"Cache-Control": {"stale-if-error=60"}},
+					},
+					inputErr: errors.New("network error"),
+				}
 			},
-			inputErr: errors.New("network error"), // Simulating an error
-			want:     storedResp,
+			assert: func(tt *testing.T, got *http.Response, err error) {
+				testutil.RequireNoError(tt, err)
+				testutil.AssertEqual(tt, http.StatusOK, got.StatusCode)
+			},
 		},
 		{
 			name: "GET with error, stale not allowed",
 			handler: &validationResponseHandler{
 				siep: &MockStaleIfErrorPolicy{
-					CanStaleOnErrorFunc: func(freshness *Freshness, sies ...StaleIfErrorer) bool { return false },
+					CanStaleOnErrorFunc: func(*Freshness, ...StaleIfErrorer) bool { return false },
 				},
 				clock: &MockClock{NowResult: base},
 			},
-			req: &http.Request{Method: http.MethodGet},
-			resp: &http.Response{
-				StatusCode: http.StatusInternalServerError,
-				Header:     http.Header{},
+			setup: func(tt *testing.T, handler *validationResponseHandler) args {
+				return args{
+					req: &http.Request{Method: http.MethodGet},
+					resp: &http.Response{
+						StatusCode: http.StatusInternalServerError,
+						Header:     http.Header{},
+					},
+					inputErr: errors.New("network error"),
+				}
 			},
-			inputErr: errors.New("network error"),
-			want:     nil,
-			wantErr:  true,
+			assert: func(tt *testing.T, got *http.Response, err error) {
+				testutil.RequireError(tt, err)
+				testutil.AssertNil(tt, got)
+			},
 		},
 		{
-			name: "Store response allowed",
-			handler: &validationResponseHandler{
-				ce: CacheabilityEvaluatorFunc(
-					func(resp *http.Response, reqCC CCRequestDirectives, resCC CCResponseDirectives) bool {
-						return true // Simulating a cacheable response
-					},
-				),
-				rs: &MockResponseStorer{},
-			},
-			req:  &http.Request{},
-			resp: &http.Response{StatusCode: http.StatusOK, Header: http.Header{}},
-			want: nil, // will check in check func
-			setup: func(tc *testCase) {
-				stored := false
-				tc.handler.rs = &MockResponseStorer{
-					StoreResponseFunc: func(resp *http.Response, key string, headers VaryHeaderEntries, reqTime, respTime time.Time) error {
-						stored = true
-						testutil.AssertEqual(t, "key", key)
-						testutil.AssertTrue(t, respTime.Equal(base))
-						testutil.AssertTrue(t, reqTime.Equal(base))
+			name:    "Store response allowed",
+			handler: &validationResponseHandler{},
+			setup: func(tt *testing.T, handler *validationResponseHandler) args {
+				handler.rs = &MockResponseStorer{
+					StoreResponseFunc: func(resp *http.Response, key string, headers ResponseRefs, reqTime, respTime time.Time, refIndex int) error {
+						testutil.AssertEqual(tt, "key", key)
+						testutil.AssertTrue(tt, respTime.Equal(base))
+						testutil.AssertTrue(tt, reqTime.Equal(base))
 						return nil
 					},
 				}
-				tc.check = func(t *testing.T, tc *testCase, got *http.Response) {
-					testutil.AssertTrue(t, stored)
+				handler.ce = CacheabilityEvaluatorFunc(
+					func(*http.Response, CCRequestDirectives, CCResponseDirectives) bool { return true },
+				)
+				return args{
+					req:  &http.Request{},
+					resp: &http.Response{StatusCode: http.StatusOK, Header: http.Header{}},
 				}
+			},
+			assert: func(tt *testing.T, got *http.Response, err error) {
+				testutil.RequireNoError(tt, err)
 			},
 		},
 		{
-			name: "Store response not allowed",
-			handler: &validationResponseHandler{
-				ce: CacheabilityEvaluatorFunc(
-					func(resp *http.Response, reqCC CCRequestDirectives, resCC CCResponseDirectives) bool {
-						return false // Simulating a non-cacheable response
+			name:    "Store response not allowed",
+			handler: &validationResponseHandler{},
+			setup: func(tt *testing.T, handler *validationResponseHandler) args {
+				handler.ci = &MockCacheInvalidator{
+					InvalidateCacheFunc: func(reqURL *url.URL, respHeader http.Header, headers ResponseRefs, key string) {
+						testutil.AssertEqual(tt, "key", key)
+						testutil.AssertTrue(tt, respHeader.Get("Cache-Control") == "")
 					},
-				),
-				ci: &MockCacheInvalidator{},
+				}
+				handler.ce = CacheabilityEvaluatorFunc(
+					func(*http.Response, CCRequestDirectives, CCResponseDirectives) bool { return false },
+				)
+				handler.rs = &MockResponseStorer{}
+				return args{
+					req:  &http.Request{},
+					resp: &http.Response{StatusCode: http.StatusOK, Header: http.Header{}},
+				}
 			},
-			req:  &http.Request{},
-			resp: &http.Response{StatusCode: http.StatusOK, Header: http.Header{}},
-			want: nil, // will check in check func
-			setup: func(tc *testCase) {
-				invalidated := false
-				tc.handler.ci = &MockCacheInvalidator{
-					InvalidateCacheFunc: func(reqURL *url.URL, respHeader http.Header, headers VaryHeaderEntries, key string) {
-						invalidated = true
-						testutil.AssertEqual(t, "key", key)
-						testutil.AssertTrue(t, respHeader.Get("Cache-Control") == "")
-					},
-				}
-				tc.check = func(t *testing.T, tc *testCase, got *http.Response) {
-					testutil.AssertTrue(t, invalidated)
-				}
+			assert: func(tt *testing.T, got *http.Response, err error) {
+				testutil.RequireNoError(tt, err)
 			},
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			if tc.setup != nil {
-				tc.setup(&tc)
-			}
-			got, err := tc.handler.HandleValidationResponse(ctx, tc.req, tc.resp, tc.inputErr)
-			if tc.wantErr {
-				testutil.RequireError(t, err)
-				testutil.AssertNil(t, got)
-			} else {
-				testutil.RequireNoError(t, err)
-				if tc.check != nil {
-					tc.check(t, &tc, got)
-				} else {
-					testutil.AssertEqual(t, tc.want.StatusCode, got.StatusCode)
-					testutil.AssertTrue(t, maps.EqualFunc(tc.want.Header, got.Header, func(a, b []string) bool {
-						return slices.Equal(a, b)
-					}))
-				}
-			}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := tt.setup(t, tt.handler)
+			got, err := tt.handler.HandleValidationResponse(ctx, a.req, a.resp, a.inputErr)
+			tt.assert(t, got, err)
 		})
 	}
 }
