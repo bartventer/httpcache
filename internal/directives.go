@@ -15,7 +15,7 @@ type RawTime string
 
 // Value returns the time and a boolean indicating whether the result is valid.
 func (r RawTime) Value() (t time.Time, valid bool) {
-	if len(r) == 0 {
+	if r == "" {
 		return
 	}
 	parsedTime, err := http.ParseTime(string(r))

@@ -8,20 +8,9 @@ import (
 
 // VaryMatcher defines the interface implemented by types that can match
 // request headers nominated by the a cached response's Vary header against
-// the headers of an incoming request. Implementations should return the index
-// of the cached response that matches the request headers, or -1 if no match
-// is found.
+// the headers of an incoming request.
 type VaryMatcher interface {
-	VaryHeadersMatch(cachedHdrs VaryHeaderEntries, reqHdr http.Header) (int, bool)
-}
-
-type VaryMatcherFunc func(cachedHdrs VaryHeaderEntries, reqHdr http.Header) (int, bool)
-
-func (f VaryMatcherFunc) VaryHeadersMatch(
-	cachedHdrs VaryHeaderEntries,
-	reqHdr http.Header,
-) (int, bool) {
-	return f(cachedHdrs, reqHdr)
+	VaryHeadersMatch(cachedHdrs ResponseRefs, reqHdr http.Header) (int, bool)
 }
 
 func NewVaryMatcher(hvn HeaderValueNormalizer) *varyMatcher {
@@ -32,8 +21,8 @@ type varyMatcher struct {
 	hvn HeaderValueNormalizer
 }
 
-func (vm *varyMatcher) VaryHeadersMatch(entries VaryHeaderEntries, reqHdr http.Header) (int, bool) {
-	slices.SortFunc(entries, func(a, b *VaryHeaderEntry) int {
+func (vm *varyMatcher) VaryHeadersMatch(entries ResponseRefs, reqHdr http.Header) (int, bool) {
+	slices.SortFunc(entries, func(a, b *ResponseRef) int {
 		aVary := strings.TrimSpace(a.Vary)
 		bVary := strings.TrimSpace(b.Vary)
 
@@ -58,29 +47,32 @@ func (vm *varyMatcher) VaryHeadersMatch(entries VaryHeaderEntries, reqHdr http.H
 		}
 
 		// If both have Vary headers, sort by Date or ResponseTime
-		return a.Timestamp.Compare(b.Timestamp)
+		return a.ReceivedAt.Compare(b.ReceivedAt)
 	})
 
 	for i, entry := range entries {
-		if entry.Vary == "*" {
-			return -1, false // Not cachable due to Vary: "*"
+		if vm.varyHeadersMatchOne(entry, reqHdr) {
+			return i, true // Found a match
 		}
-		for field, value := range entry.VaryResolved {
-			reqValue := reqHdr[field] // field is already canonicalized
-			if len(reqValue) == 0 {
-				goto nextEntry
-			}
-			// NOTE: The policy of this cache is to use just the first header line
-			normalizedValue := vm.hvn.NormalizeHeaderValue(field, reqValue[0])
-			if normalizedValue != value {
-				goto nextEntry
-			}
-		}
-		return i, true
-
-	nextEntry:
-		continue
 	}
 
 	return -1, false // No match found
+}
+
+func (vm *varyMatcher) varyHeadersMatchOne(entry *ResponseRef, reqHdr http.Header) bool {
+	if entry.Vary == "*" {
+		return false // Vary: "*" never matches
+	}
+	for field, value := range entry.VaryResolved {
+		reqValue := reqHdr[field] // field is already canonicalized
+		if len(reqValue) == 0 {
+			return false
+		}
+		// NOTE: The policy of this cache is to use just the first header line
+		normalizedValue := vm.hvn.NormalizeHeaderValue(field, reqValue[0])
+		if normalizedValue != value {
+			return false
+		}
+	}
+	return true
 }

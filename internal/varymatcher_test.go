@@ -6,11 +6,11 @@ import (
 	"time"
 )
 
-func makeHeaderEntry(vary string, varyResolved map[string]string, ts time.Time) *VaryHeaderEntry {
-	return &VaryHeaderEntry{
+func makeHeaderEntry(vary string, varyResolved map[string]string, ts time.Time) *ResponseRef {
+	return &ResponseRef{
 		Vary:         vary,
 		VaryResolved: varyResolved,
-		Timestamp:    ts,
+		ReceivedAt:   ts,
 	}
 }
 
@@ -18,14 +18,14 @@ func TestVaryMatcher_VaryHeadersMatch(t *testing.T) {
 	now := time.Now()
 	tests := []struct {
 		name    string
-		entries VaryHeaderEntries
+		entries ResponseRefs
 		reqHdr  http.Header
 		wantIdx int
 		wantOk  bool
 	}{
 		{
 			name: "no vary header, always matches",
-			entries: VaryHeaderEntries{
+			entries: ResponseRefs{
 				makeHeaderEntry("", map[string]string{}, now),
 			},
 			reqHdr:  http.Header{"Accept": []string{"text/html"}},
@@ -34,7 +34,7 @@ func TestVaryMatcher_VaryHeadersMatch(t *testing.T) {
 		},
 		{
 			name: "vary header matches",
-			entries: VaryHeaderEntries{
+			entries: ResponseRefs{
 				makeHeaderEntry("Accept", map[string]string{"Accept": "text/html"}, now),
 			},
 			reqHdr:  http.Header{"Accept": []string{"text/html"}},
@@ -43,7 +43,7 @@ func TestVaryMatcher_VaryHeadersMatch(t *testing.T) {
 		},
 		{
 			name: "vary header does not match",
-			entries: VaryHeaderEntries{
+			entries: ResponseRefs{
 				makeHeaderEntry("Accept", map[string]string{"Accept": "text/html"}, now),
 			},
 			reqHdr:  http.Header{"Accept": []string{"application/json"}},
@@ -52,7 +52,7 @@ func TestVaryMatcher_VaryHeadersMatch(t *testing.T) {
 		},
 		{
 			name: "vary header with wildcard",
-			entries: VaryHeaderEntries{
+			entries: ResponseRefs{
 				makeHeaderEntry("*", map[string]string{}, now),
 			},
 			reqHdr:  http.Header{"Accept": []string{"text/html"}},
@@ -61,7 +61,7 @@ func TestVaryMatcher_VaryHeadersMatch(t *testing.T) {
 		},
 		{
 			name: "multiple entries, first matches",
-			entries: VaryHeaderEntries{
+			entries: ResponseRefs{
 				makeHeaderEntry("Accept", map[string]string{"Accept": "text/html"}, now),
 				makeHeaderEntry(
 					"Accept",
@@ -75,7 +75,7 @@ func TestVaryMatcher_VaryHeadersMatch(t *testing.T) {
 		},
 		{
 			name: "multiple entries, second matches",
-			entries: VaryHeaderEntries{
+			entries: ResponseRefs{
 				makeHeaderEntry("Accept", map[string]string{"Accept": "application/json"}, now),
 				makeHeaderEntry(
 					"Accept",
@@ -89,7 +89,7 @@ func TestVaryMatcher_VaryHeadersMatch(t *testing.T) {
 		},
 		{
 			name: "multiple entries, none match",
-			entries: VaryHeaderEntries{
+			entries: ResponseRefs{
 				makeHeaderEntry("Accept", map[string]string{"Accept": "application/json"}, now),
 				makeHeaderEntry(
 					"Accept",
@@ -103,7 +103,7 @@ func TestVaryMatcher_VaryHeadersMatch(t *testing.T) {
 		},
 		{
 			name: "entry with missing header in request",
-			entries: VaryHeaderEntries{
+			entries: ResponseRefs{
 				makeHeaderEntry("Accept", map[string]string{"Accept": "text/html"}, now),
 			},
 			reqHdr:  http.Header{}, // Accept header missing
@@ -112,7 +112,7 @@ func TestVaryMatcher_VaryHeadersMatch(t *testing.T) {
 		},
 		{
 			name: "entry with multiple fields, all match",
-			entries: VaryHeaderEntries{
+			entries: ResponseRefs{
 				makeHeaderEntry(
 					"Accept,User-Agent",
 					map[string]string{"Accept": "text/html", "User-Agent": "Go-http-client"},
@@ -128,7 +128,7 @@ func TestVaryMatcher_VaryHeadersMatch(t *testing.T) {
 		},
 		{
 			name: "entry with multiple fields, one does not match",
-			entries: VaryHeaderEntries{
+			entries: ResponseRefs{
 				makeHeaderEntry(
 					"Accept,User-Agent",
 					map[string]string{"Accept": "text/html", "User-Agent": "Go-http-client"},

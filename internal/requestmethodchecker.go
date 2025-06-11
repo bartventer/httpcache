@@ -21,6 +21,5 @@ func NewRequestMethodChecker() RequestMethodChecker {
 }
 
 func isRequestMethodUnderstood(req *http.Request) bool {
-	return (req.Method == http.MethodGet || req.Method == http.MethodHead) &&
-		req.Header.Get("Range") == ""
+	return req.Method == http.MethodGet && req.Header.Get("Range") == ""
 }

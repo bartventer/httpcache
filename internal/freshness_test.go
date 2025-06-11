@@ -153,7 +153,7 @@ func Test_freshnessCalculator_CalculateFreshness(t *testing.T) {
 	tests := []struct {
 		name  string
 		clock Clock
-		entry *ResponseEntry
+		entry *Response
 		reqCC map[string]string
 		resCC map[string]string
 		want  *Freshness
@@ -161,10 +161,10 @@ func Test_freshnessCalculator_CalculateFreshness(t *testing.T) {
 		{
 			name:  "Request with Max-Age=0",
 			clock: &MockClock{NowResult: base.Add(30 * time.Second)},
-			entry: &ResponseEntry{
-				Response: fakeResponse(base.Add(10*time.Second), http.Header{}),
-				RespTime: base.Add(10 * time.Second),
-				ReqTime:  base.Add(5 * time.Second),
+			entry: &Response{
+				Data:        fakeResponse(base.Add(10*time.Second), http.Header{}),
+				ReceivedAt:  base.Add(10 * time.Second),
+				RequestedAt: base.Add(5 * time.Second),
 			},
 			reqCC: map[string]string{"max-age": "0"},
 			resCC: map[string]string{},
@@ -180,10 +180,10 @@ func Test_freshnessCalculator_CalculateFreshness(t *testing.T) {
 				NowResult:   base.Add(30 * time.Second),
 				SinceResult: time.Second * 20,
 			},
-			entry: &ResponseEntry{
-				Response: fakeResponse(base.Add(10*time.Second), http.Header{}),
-				RespTime: base.Add(10 * time.Second),
-				ReqTime:  base.Add(10 * time.Second),
+			entry: &Response{
+				Data:        fakeResponse(base.Add(10*time.Second), http.Header{}),
+				ReceivedAt:  base.Add(10 * time.Second),
+				RequestedAt: base.Add(10 * time.Second),
 			},
 			reqCC: map[string]string{},
 			resCC: map[string]string{"max-age": "25"},
@@ -199,13 +199,13 @@ func Test_freshnessCalculator_CalculateFreshness(t *testing.T) {
 				NowResult:   base.Add(30 * time.Second),
 				SinceResult: time.Second * 20,
 			},
-			entry: &ResponseEntry{
-				Response: fakeResponse(base.Add(10*time.Second), http.Header{
+			entry: &Response{
+				Data: fakeResponse(base.Add(10*time.Second), http.Header{
 					"Expires": {base.Add(60 * time.Second).UTC().Format(http.TimeFormat)},
 					"Date":    {""}, // Simulate missing Date header
 				}),
-				RespTime: base.Add(10 * time.Second),
-				ReqTime:  base.Add(10 * time.Second),
+				ReceivedAt:  base.Add(10 * time.Second),
+				RequestedAt: base.Add(10 * time.Second),
 			},
 			reqCC: map[string]string{},
 			resCC: map[string]string{},
@@ -221,10 +221,10 @@ func Test_freshnessCalculator_CalculateFreshness(t *testing.T) {
 				NowResult:   base.Add(30 * time.Second),
 				SinceResult: time.Second * 20,
 			},
-			entry: &ResponseEntry{
-				Response: fakeResponse(base.Add(10*time.Second), http.Header{}),
-				RespTime: base.Add(10 * time.Second),
-				ReqTime:  base.Add(10 * time.Second),
+			entry: &Response{
+				Data:        fakeResponse(base.Add(10*time.Second), http.Header{}),
+				ReceivedAt:  base.Add(10 * time.Second),
+				RequestedAt: base.Add(10 * time.Second),
 			},
 			reqCC: map[string]string{"max-age": "15"},
 			resCC: map[string]string{"max-age": "25"},
@@ -240,10 +240,10 @@ func Test_freshnessCalculator_CalculateFreshness(t *testing.T) {
 				NowResult:   base.Add(60 * time.Second),
 				SinceResult: time.Second * 50,
 			},
-			entry: &ResponseEntry{
-				Response: fakeResponse(base.Add(10*time.Second), http.Header{}),
-				RespTime: base.Add(10 * time.Second),
-				ReqTime:  base.Add(10 * time.Second),
+			entry: &Response{
+				Data:        fakeResponse(base.Add(10*time.Second), http.Header{}),
+				ReceivedAt:  base.Add(10 * time.Second),
+				RequestedAt: base.Add(10 * time.Second),
 			},
 			reqCC: map[string]string{},
 			resCC: map[string]string{"max-age": "25"},
@@ -259,12 +259,12 @@ func Test_freshnessCalculator_CalculateFreshness(t *testing.T) {
 				NowResult:   base.Add(15 * time.Second),
 				SinceResult: time.Second * 5,
 			},
-			entry: &ResponseEntry{
-				Response: fakeResponse(base.Add(10*time.Second), http.Header{
+			entry: &Response{
+				Data: fakeResponse(base.Add(10*time.Second), http.Header{
 					"Last-Modified": {base.Add(-50 * time.Second).UTC().Format(time.RFC850)},
 				}),
-				RespTime: base.Add(10 * time.Second),
-				ReqTime:  base.Add(10 * time.Second),
+				ReceivedAt:  base.Add(10 * time.Second),
+				RequestedAt: base.Add(10 * time.Second),
 			},
 			reqCC: map[string]string{},
 			resCC: map[string]string{"public": ""},
@@ -283,10 +283,10 @@ func Test_freshnessCalculator_CalculateFreshness(t *testing.T) {
 				NowResult:   base.Add(30 * time.Second),
 				SinceResult: time.Second * 20,
 			},
-			entry: &ResponseEntry{
-				Response: fakeResponse(base.Add(10*time.Second), http.Header{}),
-				RespTime: base.Add(10 * time.Second),
-				ReqTime:  base.Add(10 * time.Second),
+			entry: &Response{
+				Data:        fakeResponse(base.Add(10*time.Second), http.Header{}),
+				ReceivedAt:  base.Add(10 * time.Second),
+				RequestedAt: base.Add(10 * time.Second),
 			},
 			reqCC: map[string]string{"min-fresh": "10"},
 			resCC: map[string]string{"max-age": "25"},
@@ -302,10 +302,10 @@ func Test_freshnessCalculator_CalculateFreshness(t *testing.T) {
 				NowResult:   base.Add(40 * time.Second),
 				SinceResult: time.Second * 30,
 			},
-			entry: &ResponseEntry{
-				Response: fakeResponse(base.Add(10*time.Second), http.Header{}),
-				RespTime: base.Add(10 * time.Second),
-				ReqTime:  base.Add(10 * time.Second),
+			entry: &Response{
+				Data:        fakeResponse(base.Add(10*time.Second), http.Header{}),
+				ReceivedAt:  base.Add(10 * time.Second),
+				RequestedAt: base.Add(10 * time.Second),
 			},
 			reqCC: map[string]string{"max-stale": "20"},
 			resCC: map[string]string{"max-age": "15"},
@@ -321,10 +321,10 @@ func Test_freshnessCalculator_CalculateFreshness(t *testing.T) {
 				NowResult:   base.Add(50 * time.Second),
 				SinceResult: time.Second * 40,
 			},
-			entry: &ResponseEntry{
-				Response: fakeResponse(base.Add(10*time.Second), http.Header{}),
-				RespTime: base.Add(10 * time.Second),
-				ReqTime:  base.Add(10 * time.Second),
+			entry: &Response{
+				Data:        fakeResponse(base.Add(10*time.Second), http.Header{}),
+				ReceivedAt:  base.Add(10 * time.Second),
+				RequestedAt: base.Add(10 * time.Second),
 			},
 			reqCC: map[string]string{"max-stale": ""},
 			resCC: map[string]string{"max-age": "15"},
@@ -338,6 +338,7 @@ func Test_freshnessCalculator_CalculateFreshness(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			f := &freshnessCalculator{clock: tt.clock}
+			FixDateHeader(tt.entry.Data.Header, tt.entry.ReceivedAt)
 			got := f.CalculateFreshness(
 				tt.entry,
 				CCRequestDirectives(tt.reqCC),
