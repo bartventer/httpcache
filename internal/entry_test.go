@@ -1,8 +1,6 @@
 package internal
 
 import (
-	"bytes"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,85 +10,141 @@ import (
 	"github.com/bartventer/httpcache/internal/testutil"
 )
 
-func TestResponseEntry_MarshalUnmarshalBinary_Success(t *testing.T) {
-	reqTime := time.Unix(0, 0).UTC()
-	respTime := reqTime.Add(2 * time.Second)
-	resp := httptest.NewRecorder().Result()
-	resp.Body = io.NopCloser(strings.NewReader("hello world"))
-
-	entry := &ResponseEntry{
-		Response: resp,
-		ReqTime:  reqTime,
-		RespTime: respTime,
+func TestResponse_MarshalBinary(t *testing.T) {
+	base := time.Unix(0, 0).UTC()
+	type fields struct {
+		ID          string
+		Data        *http.Response
+		RequestedAt time.Time
+		ReceivedAt  time.Time
 	}
+	tests := []struct {
+		name      string
+		fields    fields
+		assertion func(tt *testing.T, got []byte, err error)
+	}{
+		{
+			name: "valid response",
+			fields: fields{
+				ID:          "testid",
+				Data:        httptest.NewRecorder().Result(),
+				RequestedAt: base,
+				ReceivedAt:  base.Add(2 * time.Second),
+			},
+			assertion: func(tt *testing.T, got []byte, err error) {
+				testutil.RequireNoError(tt, err)
 
-	data, err := entry.MarshalBinary()
-	testutil.RequireNoError(t, err)
-
-	// Unmarshal into a new Entry
-	req := &http.Request{Method: http.MethodGet}
-	var entry2 ResponseEntry
-	err = entry2.UnmarshalBinaryWithRequest(data, req)
-
-	testutil.RequireNoError(t, err)
-	testutil.AssertTrue(t, entry2.ReqTime.Equal(reqTime))
-	testutil.AssertTrue(t, entry2.RespTime.Equal(respTime))
-	testutil.AssertEqual(t, entry2.Response.StatusCode, http.StatusOK)
-
-	body, _ := io.ReadAll(entry2.Response.Body)
-	testutil.AssertEqual(t, string(body), "hello world")
+				gotResp, err := ParseResponse(got, &http.Request{Method: http.MethodGet})
+				testutil.RequireNoError(tt, err)
+				testutil.AssertEqual(tt, gotResp.ID, "testid")
+				testutil.AssertTrue(tt, gotResp.RequestedAt.Equal(base))
+				testutil.AssertTrue(tt, gotResp.ReceivedAt.Equal(base.Add(2*time.Second)))
+				testutil.AssertNotNil(tt, gotResp.Data)
+				testutil.AssertEqual(tt, gotResp.Data.StatusCode, http.StatusOK)
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := Response{
+				ID:          tt.fields.ID,
+				Data:        tt.fields.Data,
+				RequestedAt: tt.fields.RequestedAt,
+				ReceivedAt:  tt.fields.ReceivedAt,
+			}
+			got, err := r.MarshalBinary()
+			tt.assertion(t, got, err)
+		})
+	}
 }
 
-func TestResponseEntry_UnmarshalBinaryWithRequest_InvalidReqTime(t *testing.T) {
-	// Corrupt reqTime
-	data := []byte("notatime\nsometime\nHTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
-	var entry ResponseEntry
-	req := &http.Request{Method: http.MethodGet}
-	err := entry.UnmarshalBinaryWithRequest(data, req)
-	testutil.RequireErrorIs(t, err, errInvalidRequestTime)
-}
-
-func TestResponseEntry_UnmarshalBinaryWithRequest_InvalidRespTime(t *testing.T) {
-	// Valid reqTime, corrupt respTime
-	now := time.Unix(0, 0).UTC()
-	reqTimeBytes, _ := now.MarshalBinary()
-
-	var buf bytes.Buffer
-	buf.Write(reqTimeBytes)
-	buf.WriteByte('\n')
-	buf.WriteString("notatime\n")
-	buf.WriteString("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
-
-	var entry ResponseEntry
-	req := &http.Request{Method: http.MethodGet}
-	err := entry.UnmarshalBinaryWithRequest(buf.Bytes(), req)
-	testutil.RequireErrorIs(t, err, errInvalidResponseTime)
-}
-
-func TestResponseEntry_UnmarshalBinaryWithRequest_InvalidResponse(t *testing.T) {
-	// Valid times, corrupt response
-	now := time.Unix(0, 0).UTC()
-	reqTimeBytes, _ := now.MarshalBinary()
-	respTimeBytes, _ := now.MarshalBinary()
-
-	var buf bytes.Buffer
-	buf.Write(reqTimeBytes)
-	buf.WriteByte('\n')
-	buf.Write(respTimeBytes)
-	buf.WriteByte('\n')
-	buf.WriteString("not a http response")
-
-	var entry ResponseEntry
-	req := &http.Request{Method: http.MethodGet}
-	err := entry.UnmarshalBinaryWithRequest(buf.Bytes(), req)
-	testutil.RequireErrorIs(t, err, errInvalidResponse)
-}
-
-func TestResponseEntry_UnmarshalBinaryWithRequest_ReadBytesError(t *testing.T) {
-	// Not enough data for reqTime
-	data := []byte{}
-	var entry ResponseEntry
-	req := &http.Request{Method: http.MethodGet}
-	err := entry.UnmarshalBinaryWithRequest(data, req)
-	testutil.RequireErrorIs(t, err, errReadBytes)
+func TestParseResponse(t *testing.T) {
+	base := time.Unix(0, 0).UTC()
+	type args struct {
+		data []byte
+		req  *http.Request
+	}
+	tests := []struct {
+		name      string
+		setup     func(*testing.T) args
+		assertion func(tt *testing.T, got *Response, err error)
+	}{
+		{
+			name: "invalid meta line",
+			setup: func(*testing.T) args {
+				return args{
+					data: []byte("invalid meta line"),
+					req:  &http.Request{Method: http.MethodGet},
+				}
+			},
+			assertion: func(tt *testing.T, got *Response, err error) {
+				testutil.RequireErrorIs(tt, err, errReadBytes)
+			},
+		},
+		{
+			name: "invalid meta line format",
+			setup: func(*testing.T) args {
+				return args{
+					data: []byte("invalid\nHTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"),
+					req:  &http.Request{Method: http.MethodGet},
+				}
+			},
+			assertion: func(tt *testing.T, got *Response, err error) {
+				testutil.RequireErrorIs(tt, err, errInvalidMetaLine)
+			},
+		},
+		{
+			name: "invalid response",
+			setup: func(*testing.T) args {
+				var buf strings.Builder
+				tmp := &Response{
+					ID:          "testid",
+					RequestedAt: base,
+					ReceivedAt:  base.Add(2 * time.Second),
+				}
+				_, _ = tmp.WriteTo(&buf)
+				buf.WriteString("not a valid http response")
+				return args{
+					data: []byte(buf.String()),
+					req:  &http.Request{Method: http.MethodGet},
+				}
+			},
+			assertion: func(tt *testing.T, got *Response, err error) {
+				testutil.RequireErrorIs(tt, err, errInvalidResponse)
+			},
+		},
+		{
+			name: "valid response",
+			setup: func(*testing.T) args {
+				var buf strings.Builder
+				tmp := &Response{
+					ID:          "testid",
+					RequestedAt: base,
+					ReceivedAt:  base.Add(2 * time.Second),
+					Data:        httptest.NewRecorder().Result(),
+				}
+				_, _ = tmp.WriteTo(&buf)
+				buf.WriteString("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
+				return args{
+					data: []byte(buf.String()),
+					req:  &http.Request{Method: http.MethodGet},
+				}
+			},
+			assertion: func(tt *testing.T, got *Response, err error) {
+				testutil.RequireNoError(tt, err)
+				testutil.AssertEqual(tt, got.ID, "testid")
+				testutil.AssertTrue(tt, got.RequestedAt.Equal(base))
+				testutil.AssertTrue(tt, got.ReceivedAt.Equal(base.Add(2*time.Second)))
+				testutil.AssertNotNil(tt, got.Data)
+				testutil.AssertEqual(tt, got.Data.StatusCode, http.StatusOK)
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			args := tt.setup(t)
+			got, err := ParseResponse(args.data, args.req)
+			tt.assertion(t, got, err)
+		})
+	}
 }
