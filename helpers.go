@@ -8,19 +8,6 @@ import (
 	"github.com/bartventer/httpcache/internal"
 )
 
-func isUnsafeMethod(req *http.Request) bool {
-	switch req.Method {
-	case http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch:
-		return true
-	default:
-		return false
-	}
-}
-
-func isNonErrorStatus(status int) bool {
-	return (status >= 200 && status < 400)
-}
-
 func make504Response(req *http.Request) (*http.Response, error) {
 	var buf bytes.Buffer
 	buf.WriteString("HTTP/1.1 504 Gateway Timeout\r\n")

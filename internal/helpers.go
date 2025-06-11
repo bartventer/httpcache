@@ -7,15 +7,6 @@ import (
 	"strings"
 )
 
-func dateFromHeader(header http.Header) RawTime    { return RawTime(header.Get("Date")) }
-func expiresFromHeader(header http.Header) RawTime { return RawTime(header.Get("Expires")) }
-
-func lastModifiedFromHeader(
-	header http.Header,
-) RawTime {
-	return RawTime(header.Get("Last-Modified"))
-}
-
 func defaultPort(scheme string) string {
 	switch scheme {
 	case "http":
@@ -144,4 +135,17 @@ func validOptionalPort(port string) bool {
 		}
 	}
 	return true
+}
+
+func IsUnsafeMethod(req *http.Request) bool {
+	switch req.Method {
+	case http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch:
+		return true
+	default:
+		return false
+	}
+}
+
+func IsNonErrorStatus(status int) bool {
+	return (status >= 200 && status < 400)
 }
