@@ -146,13 +146,13 @@ X-Httpcache-Status: HIT
 <details id="storing-responses-details">
 <summary><strong>§3. Storing Responses in Caches (Details)</strong></summary>
 
-| §    | Title                                       | Requirement | Implemented | Notes                           |
-| ---- | ------------------------------------------- | :---------: | :---------: | ------------------------------- |
-| 3.1. | Storing Header and Trailer Fields           |  Required   |      ✔️      |                                 |
-| 3.2. | Updating Stored Header Fields               |  Required   |      ✔️      |                                 |
-| 3.3. | Storing Incomplete Responses                |  Optional   |      ❌      | See [Limitations](#limitations) |
-| 3.4. | Combining Partial Content                   |  Optional   |      ❌      | See [Limitations](#limitations) |
-| 3.5. | Storing Responses to Authenticated Requests |  Required   |      ✔️      |                                 |
+| §    | Title                                       | Requirement | Implemented | Notes                                        |
+| ---- | ------------------------------------------- | :---------: | :---------: | -------------------------------------------- |
+| 3.1. | Storing Header and Trailer Fields           |  Required   |      ✔️      |                                              |
+| 3.2. | Updating Stored Header Fields               |  Required   |      ✔️      |                                              |
+| 3.3. | Storing Incomplete Responses                |  Optional   |      ❌      | See [Limitations](#limitations)              |
+| 3.4. | Combining Partial Content                   |  Optional   |      ❌      | See [Limitations](#limitations)              |
+| 3.5. | Storing Responses to Authenticated Requests |     N/A     |     N/A     | Not applicable to private client-side caches |
 
 </details>
 
@@ -183,13 +183,13 @@ X-Httpcache-Status: HIT
 <details id="validation-details">
 <summary><em>§4.3. Validation (Subsections)</em></summary>
 
-|   §    | Title                                       | Requirement | Implemented | Notes                                        |
-| :----: | ------------------------------------------- | :---------: | :---------: | -------------------------------------------- |
-| 4.3.1. | Sending a Validation Request                |  Required   |      ✔️      |                                              |
-| 4.3.2. | Handling Received Validation Request        |     N/A     |     N/A     | Not applicable to private client-side caches |
-| 4.3.3. | Handling a Validation Response              |  Required   |      ✔️      |                                              |
-| 4.3.4. | Freshening Stored Responses upon Validation |  Required   |      ✔️      |                                              |
-| 4.3.5. | Freshening Responses with HEAD              |  Required   |      ✔️      |                                              |
+|   §    | Title                                       | Requirement | Implemented | Notes                                                                                                                                  |
+| :----: | ------------------------------------------- | :---------: | :---------: | -------------------------------------------------------------------------------------------------------------------------------------- |
+| 4.3.1. | Sending a Validation Request                |  Required   |      ✔️      |                                                                                                                                        |
+| 4.3.2. | Handling Received Validation Request        |     N/A     |     N/A     | Not applicable to private client-side caches                                                                                           |
+| 4.3.3. | Handling a Validation Response              |  Required   |      ✔️      |                                                                                                                                        |
+| 4.3.4. | Freshening Stored Responses upon Validation |  Required   |      ✔️      |                                                                                                                                        |
+| 4.3.5. | Freshening Responses with HEAD              |  Optional   |      ❌      | Pointless, rather use conditional GETs; see [RFC 9110 §13.2.1 last para](https://datatracker.ietf.org/doc/html/rfc9110#section-13.2.1) |
 
 </details>
 
