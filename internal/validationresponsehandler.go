@@ -21,11 +21,6 @@ const (
 	CacheStatusBypass      CacheStatus = "BYPASS"      // Response was not served from cache due to cache bypass
 )
 
-type HeaderKey string
-
-func (h HeaderKey) String() string                { return string(h) }
-func (h HeaderKey) Equal(h1, h2 http.Header) bool { return h1.Get(string(h)) == h2.Get(string(h)) }
-
 type ValidationResponseHandler interface {
 	HandleValidationResponse(
 		ctx RevalidationContext,
@@ -36,12 +31,13 @@ type ValidationResponseHandler interface {
 }
 
 type RevalidationContext struct {
-	URLKey         string
-	Start, End     time.Time
-	CCReq          CCRequestDirectives
-	StoredResponse *ResponseEntry
-	StoredHeaders  VaryHeaderEntries
-	Freshness      *Freshness
+	URLKey     string
+	Start, End time.Time
+	CCReq      CCRequestDirectives
+	Stored     *Response
+	Refs       ResponseRefs
+	RefIndex   int
+	Freshness  *Freshness
 }
 
 type validationResponseHandler struct {
@@ -62,7 +58,6 @@ func NewValidationResponseHandler(
 	return &validationResponseHandler{clock, ci, ce, siep, rs}
 }
 
-//nolint:cyclop // Complexity is high due to RFC 9111 rules.
 func (r *validationResponseHandler) HandleValidationResponse(
 	ctx RevalidationContext,
 	req *http.Request,
@@ -73,29 +68,17 @@ func (r *validationResponseHandler) HandleValidationResponse(
 	case err == nil && req.Method == http.MethodGet && resp.StatusCode == http.StatusNotModified:
 		// RFC 9111 §4.3.3 Handling Validation Responses (304 Not Modified)
 		// RFC 9111 §4.3.4 Freshening Stored Responses upon Validation
-		updateStoredHeaders(ctx.StoredResponse.Response, resp)
-		CacheStatusRevalidated.ApplyTo(ctx.StoredResponse.Response.Header)
-		return ctx.StoredResponse.Response, nil
-	case err == nil && req.Method == http.MethodHead && resp.StatusCode == http.StatusOK:
-		// RFC 9111 §4.3.5 Freshening Responses with HEAD
-		if HeaderKey("ETag").Equal(ctx.StoredResponse.Response.Header, resp.Header) &&
-			HeaderKey("Last-Modified").Equal(ctx.StoredResponse.Response.Header, resp.Header) &&
-			HeaderKey("Content-Length").Equal(ctx.StoredResponse.Response.Header, resp.Header) {
-			updateStoredHeaders(ctx.StoredResponse.Response, resp)
-			CacheStatusRevalidated.ApplyTo(resp.Header)
-		} else {
-			r.ci.InvalidateCache(req.URL, resp.Header, ctx.StoredHeaders, ctx.URLKey)
-			CacheStatusBypass.ApplyTo(resp.Header)
-		}
-		return resp, nil
+		updateStoredHeaders(ctx.Stored.Data, resp)
+		CacheStatusRevalidated.ApplyTo(ctx.Stored.Data.Header)
+		return ctx.Stored.Data, nil
 	case (err != nil || isStaleErrorAllowed(resp.StatusCode)) &&
 		req.Method == http.MethodGet &&
 		r.siep.CanStaleOnError(ctx.Freshness, ParseCCResponseDirectives(resp.Header)):
 		// RFC 9111 §4.2.4 Serving Stale Responses
 		// RFC 9111 §4.3.3 Handling Validation Responses (5xx errors)
-		SetAgeHeader(ctx.StoredResponse.Response, r.clock, ctx.Freshness.Age)
-		CacheStatusStale.ApplyTo(ctx.StoredResponse.Response.Header)
-		return ctx.StoredResponse.Response, nil
+		SetAgeHeader(ctx.Stored.Data, r.clock, ctx.Freshness.Age)
+		CacheStatusStale.ApplyTo(ctx.Stored.Data.Header)
+		return ctx.Stored.Data, nil
 	default:
 		if err != nil {
 			return nil, err
@@ -104,13 +87,15 @@ func (r *validationResponseHandler) HandleValidationResponse(
 		// RFC 9111 §3.2 Storing Responses
 		ccResp := ParseCCResponseDirectives(resp.Header)
 		if r.ce.CanStoreResponse(resp, ctx.CCReq, ccResp) {
-			_ = r.rs.StoreResponse(resp, ctx.URLKey, ctx.StoredHeaders, ctx.Start, ctx.End)
+			_ = r.rs.StoreResponse(resp, ctx.URLKey, ctx.Refs, ctx.Start, ctx.End, ctx.RefIndex)
 			CacheStatusMiss.ApplyTo(resp.Header)
-			return resp, nil
 		} else {
-			r.ci.InvalidateCache(req.URL, resp.Header, ctx.StoredHeaders, ctx.URLKey)
 			CacheStatusBypass.ApplyTo(resp.Header)
-			return resp, nil
+			if IsUnsafeMethod(req) && IsNonErrorStatus(resp.StatusCode) {
+				// RFC 9111 §4.4 Invalidation of Cache Entries
+				r.ci.InvalidateCache(req.URL, resp.Header, ctx.Refs, ctx.URLKey)
+			}
 		}
+		return resp, nil
 	}
 }
