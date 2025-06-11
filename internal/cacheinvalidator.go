@@ -5,10 +5,13 @@ import (
 	"net/url"
 )
 
-// CacheInvalidator describes the interface implemented by types that can invalidate cache entries
-// based on request and response headers, as specified in RFC 9111 §4.4.
+// CacheInvalidator describes the interface implemented by types that can
+// invalidate cache entries for a target URI when an unsafe request receives a
+// non-error response, as required by RFC 9111 §4.4. It may also invalidate
+// entries for URIs in Location or Content-Location headers, but only if they
+// share the same origin as the target URI.
 type CacheInvalidator interface {
-	InvalidateCache(reqURL *url.URL, respHeader http.Header, headers VaryHeaderEntries, key string)
+	InvalidateCache(reqURL *url.URL, respHeader http.Header, headers ResponseRefs, key string)
 }
 
 type cacheInvalidator struct {
@@ -23,21 +26,30 @@ func NewCacheInvalidator(cache ResponseCache, cke URLKeyer) *cacheInvalidator {
 func (r *cacheInvalidator) InvalidateCache(
 	reqURL *url.URL,
 	respHeader http.Header,
-	headers VaryHeaderEntries,
+	refs ResponseRefs,
 	key string,
 ) {
-	_ = r.cache.Delete(key)
-	if len(headers) > 0 {
-		for _, h := range headers.ResponseIDs() {
-			_ = r.cache.Delete(h)
+	deleted := map[string]struct{}{}
+	del := func(k string) {
+		if _, ok := deleted[k]; !ok {
+			_ = r.cache.Delete(k)
+			deleted[k] = struct{}{}
 		}
 	}
-	r.invalidateLocationHeaders(reqURL, respHeader)
+	for h := range refs.ResponseIDs() {
+		del(h)
+	}
+	_ = r.invalidateLocationHeaders(reqURL, respHeader, del)
+	del(key)
 }
 
 var locationHeaders = [...]string{"Location", "Content-Location"}
 
-func (r *cacheInvalidator) invalidateLocationHeaders(reqURL *url.URL, respHeader http.Header) {
+func (r *cacheInvalidator) invalidateLocationHeaders(
+	reqURL *url.URL,
+	respHeader http.Header,
+	deleteFn func(string),
+) (n int) {
 	for _, hdr := range locationHeaders {
 		loc := respHeader.Get(hdr)
 		if loc == "" {
@@ -45,18 +57,17 @@ func (r *cacheInvalidator) invalidateLocationHeaders(reqURL *url.URL, respHeader
 		}
 		locURL, err := url.Parse(loc)
 		if err != nil {
-			continue // invalid Location header, nothing to do
+			continue
 		}
-		// Resolve relative URIs against request URI
 		locURL = reqURL.ResolveReference(locURL)
 		if sameOrigin(reqURL, locURL) {
-			locKey := r.cke.URLKey(locURL)
-			headers, _ := r.cache.GetHeaders(locKey)
-			if len(headers) > 0 {
-				for _, h := range headers.ResponseIDs() {
-					_ = r.cache.Delete(h)
-				}
+			urlKey := r.cke.URLKey(locURL)
+			refs, _ := r.cache.GetRefs(urlKey)
+			for h := range refs.ResponseIDs() {
+				deleteFn(h)
 			}
+			deleteFn(urlKey)
 		}
 	}
+	return
 }

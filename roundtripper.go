@@ -188,29 +188,39 @@ func (r *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 		return r.handleUnrecognizedMethod(req, urlKey)
 	}
 
-	headers, err := r.cache.GetHeaders(urlKey)
-	if err != nil || len(headers) == 0 {
-		return r.handleCacheMiss(req, urlKey, nil)
+	refs, err := r.cache.GetRefs(urlKey)
+	if err != nil || len(refs) == 0 {
+		return r.handleCacheMiss(req, urlKey, nil, -1)
 	}
 
-	idx, found := r.vmc.VaryHeadersMatch(headers, req.Header)
+	refIdx, found := r.vmc.VaryHeadersMatch(refs, req.Header)
 	if !found {
-		return r.handleCacheMiss(req, urlKey, headers)
+		return r.handleCacheMiss(req, urlKey, refs, -1)
 	}
 
-	entry, err := r.cache.Get(headers[idx].ResponseID, req)
+	entry, err := r.cache.Get(refs[refIdx].ResponseID, req)
 	if err != nil || entry == nil {
-		return r.handleCacheMiss(req, urlKey, headers)
+		r.logger.Warn(
+			"Cache reference found but entry missing or unreadable; possible cache corruption or concurrent eviction. Falling back to cache miss.",
+			slog.String("url", req.URL.String()),
+			slog.String("method", req.Method),
+			slog.String("cacheKey", urlKey),
+			slog.Int("refIndex", refIdx),
+			slog.String("vary", refs[refIdx].Vary),
+			slog.String("responseID", refs[refIdx].ResponseID),
+			slog.Any("error", err),
+		)
+		return r.handleCacheMiss(req, urlKey, refs, refIdx)
 	}
 
-	return r.handleCacheHit(req, entry, urlKey, headers)
+	return r.handleCacheHit(req, entry, urlKey, refs, refIdx)
 }
 
 func (r *roundTripper) handleUnrecognizedMethod(
 	req *http.Request,
 	urlKey string,
 ) (*http.Response, error) {
-	if !isUnsafeMethod(req) {
+	if !internal.IsUnsafeMethod(req) {
 		resp, err := r.transport.RoundTrip(req)
 		if err != nil {
 			return nil, err
@@ -222,8 +232,8 @@ func (r *roundTripper) handleUnrecognizedMethod(
 	if err != nil {
 		return nil, err
 	}
-	if isNonErrorStatus(resp.StatusCode) {
-		headers, _ := r.cache.GetHeaders(urlKey)
+	if internal.IsNonErrorStatus(resp.StatusCode) {
+		headers, _ := r.cache.GetRefs(urlKey)
 		r.ci.InvalidateCache(req.URL, resp.Header, headers, urlKey)
 	}
 	internal.CacheStatusBypass.ApplyTo(resp.Header)
@@ -233,7 +243,8 @@ func (r *roundTripper) handleUnrecognizedMethod(
 func (r *roundTripper) handleCacheMiss(
 	req *http.Request,
 	urlKey string,
-	headers internal.VaryHeaderEntries,
+	headers internal.ResponseRefs,
+	refIndex int,
 ) (*http.Response, error) {
 	ccReq := internal.ParseCCRequestDirectives(req.Header)
 	if ccReq.OnlyIfCached() {
@@ -245,7 +256,7 @@ func (r *roundTripper) handleCacheMiss(
 	}
 	ccResp := internal.ParseCCResponseDirectives(resp.Header)
 	if r.ce.CanStoreResponse(resp, ccReq, ccResp) {
-		_ = r.rs.StoreResponse(resp, urlKey, headers, start, end)
+		_ = r.rs.StoreResponse(resp, urlKey, headers, start, end, refIndex)
 	}
 	internal.CacheStatusMiss.ApplyTo(resp.Header)
 	return resp, nil
@@ -253,12 +264,13 @@ func (r *roundTripper) handleCacheMiss(
 
 func (r *roundTripper) handleCacheHit(
 	req *http.Request,
-	stored *internal.ResponseEntry,
+	stored *internal.Response,
 	urlKey string,
-	headers internal.VaryHeaderEntries,
+	refs internal.ResponseRefs,
+	refIndex int,
 ) (*http.Response, error) {
 	ccReq := internal.ParseCCRequestDirectives(req.Header)
-	ccResp := internal.ParseCCResponseDirectives(stored.Response.Header)
+	ccResp := internal.ParseCCResponseDirectives(stored.Data.Header)
 	freshness := r.fc.CalculateFreshness(stored, ccReq, ccResp)
 	respNoCacheFieldsRaw, hasRespNoCache := ccResp.NoCache()
 	respNoCacheFieldsSeq, isRespNoCacheQualified := respNoCacheFieldsRaw.Value()
@@ -290,23 +302,23 @@ func (r *roundTripper) handleCacheHit(
 	}
 
 revalidate:
-	req = withConditionalHeaders(req, stored.Response.Header)
-	var start, end time.Time
+	req = withConditionalHeaders(req, stored.Data.Header)
 	resp, start, end, err := r.roundTripTimed(req)
 	ctx := internal.RevalidationContext{
-		URLKey:         urlKey,
-		Start:          start,
-		End:            end,
-		CCReq:          ccReq,
-		StoredResponse: stored,
-		StoredHeaders:  headers,
-		Freshness:      freshness,
+		URLKey:    urlKey,
+		Start:     start,
+		End:       end,
+		CCReq:     ccReq,
+		Stored:    stored,
+		Refs:      refs,
+		RefIndex:  refIndex,
+		Freshness: freshness,
 	}
 	return r.vh.HandleValidationResponse(ctx, req, resp, err)
 }
 
 func (r *roundTripper) serveFromCache(
-	storedEntry *internal.ResponseEntry,
+	storedEntry *internal.Response,
 	freshness *internal.Freshness,
 	noCacheQualified bool,
 	noCacheFieldsSeq iter.Seq[string],
@@ -314,31 +326,31 @@ func (r *roundTripper) serveFromCache(
 	if noCacheQualified {
 		//Qualified no-cache: may serve from cache with fields stripped
 		for field := range noCacheFieldsSeq {
-			storedEntry.Response.Header.Del(field)
+			storedEntry.Data.Header.Del(field)
 		}
 	}
-	internal.SetAgeHeader(storedEntry.Response, r.clock, freshness.Age)
-	internal.CacheStatusHit.ApplyTo(storedEntry.Response.Header)
-	return storedEntry.Response, nil
+	internal.SetAgeHeader(storedEntry.Data, r.clock, freshness.Age)
+	internal.CacheStatusHit.ApplyTo(storedEntry.Data.Header)
+	return storedEntry.Data, nil
 }
 
 func (r *roundTripper) handleStaleWhileRevalidate(
 	req *http.Request,
-	storedEntry *internal.ResponseEntry,
+	storedEntry *internal.Response,
 	cacheKey string,
 	freshness *internal.Freshness,
 	ccReq internal.CCRequestDirectives,
 ) (*http.Response, error) {
 	req2 := req.Clone(req.Context())
-	req2 = withConditionalHeaders(req2, storedEntry.Response.Header)
+	req2 = withConditionalHeaders(req2, storedEntry.Data.Header)
 	go r.performBackgroundRevalidation(req2, storedEntry, cacheKey, freshness, ccReq)
-	internal.CacheStatusStale.ApplyTo(storedEntry.Response.Header)
-	return storedEntry.Response, nil
+	internal.CacheStatusStale.ApplyTo(storedEntry.Data.Header)
+	return storedEntry.Data, nil
 }
 
 func (r *roundTripper) performBackgroundRevalidation(
 	req *http.Request,
-	storedEntry *internal.ResponseEntry,
+	storedEntry *internal.Response,
 	cacheKey string,
 	freshness *internal.Freshness,
 	ccReq internal.CCRequestDirectives,
@@ -374,7 +386,7 @@ func (r *roundTripper) performBackgroundRevalidation(
 
 func (r *roundTripper) backgroundRevalidate(
 	req *http.Request,
-	stored *internal.ResponseEntry,
+	stored *internal.Response,
 	cacheKey string,
 	freshness *internal.Freshness,
 	ccReq internal.CCRequestDirectives,
@@ -388,12 +400,12 @@ func (r *roundTripper) backgroundRevalidate(
 		return ctxErr
 	}
 	ctx := internal.RevalidationContext{
-		URLKey:         cacheKey,
-		Start:          start,
-		End:            end,
-		CCReq:          ccReq,
-		StoredResponse: stored,
-		Freshness:      freshness,
+		URLKey:    cacheKey,
+		Start:     start,
+		End:       end,
+		CCReq:     ccReq,
+		Stored:    stored,
+		Freshness: freshness,
 	}
 	//nolint:bodyclose // The response is not used, so we don't need to close it.
 	_, err = r.vh.HandleValidationResponse(ctx, req, resp, nil)
@@ -406,5 +418,8 @@ func (r *roundTripper) roundTripTimed(
 	start = r.clock.Now()
 	resp, err = r.transport.RoundTrip(req)
 	end = r.clock.Now()
+	if resp != nil {
+		_ = internal.FixDateHeader(resp.Header, end)
+	}
 	return
 }
