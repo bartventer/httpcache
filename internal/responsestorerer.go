@@ -9,12 +9,17 @@ import (
 
 // ResponseStorer describes the interface implemented by types that can store HTTP responses
 // in a cache, as specified in RFC 9111 §3.1.
+//
+// If refs is nil, a new slice should be  created. If refIndex is valid, the
+// reference at that index should be updated; otherwise, a new reference should
+// be appended.
 type ResponseStorer interface {
 	StoreResponse(
 		resp *http.Response,
-		key string,
-		headers VaryHeaderEntries,
+		urlKey string,
+		refs ResponseRefs,
 		reqTime, respTime time.Time,
+		refIndex int,
 	) error
 }
 
@@ -28,47 +33,49 @@ func NewResponseStorer(cache ResponseCache, vhn VaryHeaderNormalizer, vk VaryKey
 	return &responseStorer{cache, vhn, vk}
 }
 
-func resolveDate(dateRaw string, fallback time.Time) time.Time {
-	date, ok := RawTime(dateRaw).Value()
-	if !ok {
-		return fallback
-	}
-	return date
-}
-
 func (r *responseStorer) StoreResponse(
 	resp *http.Response,
-	key string,
-	headers VaryHeaderEntries,
+	urlKey string,
+	refs ResponseRefs,
 	reqTime, respTime time.Time,
+	refIndex int,
 ) error {
 	// Remove hop-by-hop headers as per RFC 9111 §3.1
 	removeHopByHopHeaders(resp)
 
-	if headers == nil {
-		headers = make(VaryHeaderEntries, 0, 1)
-	} else {
-		headers = slices.Grow(headers, 1)
-	}
-
+	vary := resp.Header.Get("Vary")
 	varyResolved := maps.Collect(
-		r.vhn.NormalizeVaryHeader(resp.Header.Get("Vary"), resp.Request.Header),
+		r.vhn.NormalizeVaryHeader(vary, resp.Request.Header),
 	)
-	responseID := r.vk.VaryKey(key, varyResolved)
-	headers = append(headers, &VaryHeaderEntry{
-		Vary:         resp.Header.Get("Vary"),
-		VaryResolved: varyResolved,
-		ResponseID:   responseID,
-		Timestamp:    resolveDate(resp.Header.Get("Date"), respTime),
-	})
+	responseID := r.vk.VaryKey(urlKey, varyResolved)
 
-	if err := r.cache.SetHeaders(key, headers); err != nil {
-		return err
+	respEntry := &Response{
+		Data:        resp,
+		RequestedAt: reqTime,
+		ReceivedAt:  respTime,
+		ID:          responseID,
+	}
+	_ = r.cache.Set(responseID, respEntry)
+
+	switch {
+	case refs == nil:
+		refs = make(ResponseRefs, 0, 1)
+	case cap(refs) <= len(refs)+1:
+		refs = slices.Grow(refs, 1)
 	}
 
-	return r.cache.Set(responseID, &ResponseEntry{
-		Response: resp,
-		ReqTime:  reqTime,
-		RespTime: respTime,
-	})
+	refEntry := &ResponseRef{
+		Vary:         vary,
+		VaryResolved: varyResolved,
+		ReceivedAt:   respEntry.DateHeader(),
+		ResponseID:   responseID,
+	}
+
+	if refIndex < 0 || refIndex >= len(refs) {
+		refs = append(refs, refEntry) // New response reference
+	} else {
+		refs[refIndex] = refEntry // Update existing response reference
+	}
+
+	return r.cache.SetRefs(urlKey, refs)
 }
