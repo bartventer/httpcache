@@ -3,7 +3,7 @@
 //
 // The main entry point is [NewTransport], which returns an [http.RoundTripper] for use with [http.Client].
 // httpcache supports the required standard HTTP caching directives, as well as extension directives such as
-// stale-while-revalidate and stale-if-error.
+// stale-while-revalidate, stale-if-error and immutable.
 //
 // Example usage:
 //
@@ -21,7 +21,7 @@
 //	)
 //
 //	func main() {
-//		dsn := "fscache://?appname=myapp" // // Example DSN for the file system cache backend
+//		dsn := "fscache://?appname=myapp" // Example DSN for the file system cache backend
 //		client := &http.Client{
 //			Transport: httpcache.NewTransport(
 //				dsn,
