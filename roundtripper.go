@@ -108,16 +108,16 @@ type roundTripper struct {
 
 const DefaultSWRTimeout = 5 * time.Second // Default timeout for Stale-While-Revalidate
 
-// ErrNilCache is used as the panic value when a nil cache is provided to [NewRoundTripper] or [NewTransport].
+// ErrOpenCache is used as the panic value when the cache cannot be opened.
 // You may recover from this panic if you wish to handle the situation gracefully.
 //
 // Example usage:
 //
 //	defer func() {
 //		if r := recover(); r != nil {
-//			if err, ok := r.(error); ok && errors.Is(err, ErrNilCache) {
+//			if err, ok := r.(error); ok && errors.Is(err, ErrOpenCache) {
 //				// Handle the error gracefully, e.g., log it or return a default transport
-//				log.Println("Cache cannot be nil:", err)
+//				log.Println("Failed to open cache:", err)
 //				client := &http.Client{
 //					Transport: http.DefaultTransport, // Fallback to default transport
 //				}
@@ -129,29 +129,26 @@ const DefaultSWRTimeout = 5 * time.Second // Default timeout for Stale-While-Rev
 //			}
 //		}
 //	}()
-var ErrNilCache = errors.New("httpcache: cache cannot be nil")
+var ErrOpenCache = errors.New("httpcache: failed to open cache")
 
 // NewTransport returns an http.RoundTripper that caches HTTP responses using
 // the specified cache backend.
 //
-// The backend is selected via a DSN (e.g., "memcache://", "fscache://").
-// Panics if the cache cannot be opened or is nil. A blank import is required
-// to register the cache backend.
+// The backend is selected via a DSN (e.g., "memcache://", "fscache://"), and
+// should correlate to a registered cache driver in the [store] package.
+// Panics with [ErrOpenCache] if the cache cannot be opened.
 //
 // To configure the transport, you can use functional options such as
 // [WithTransport], [WithSWRTimeout], and [WithLogger].
 func NewTransport(dsn string, options ...Option) http.RoundTripper {
 	cache, err := store.Open(dsn)
 	if err != nil {
-		panic(fmt.Errorf("httpcache: failed to open cache: %w", err))
+		panic(ErrOpenCache)
 	}
 	return newTransport(cache, options...)
 }
 
 func newTransport(cache store.Cache, options ...Option) http.RoundTripper {
-	if cache == nil {
-		panic(ErrNilCache)
-	}
 	rt := &roundTripper{
 		cache: internal.NewResponseCache(cache),
 		rmc:   internal.NewRequestMethodChecker(),

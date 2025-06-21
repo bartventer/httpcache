@@ -773,16 +773,6 @@ func TestNewTransport_Panic(t *testing.T) {
 	})
 }
 
-func Test_newTransport_Panic(t *testing.T) {
-	testutil.RequirePanics(t, func() {
-		newTransport(
-			nil,
-			WithTransport(http.DefaultTransport),
-			WithLogger(slog.New(slog.DiscardHandler)),
-		)
-	})
-}
-
 //nolint:cyclop // Acceptable complexity for a test function
 func TestRoundTripper_Vary(t *testing.T) {
 	etag := `W/"1234567890"`
