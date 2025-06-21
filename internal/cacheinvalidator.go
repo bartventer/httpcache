@@ -39,7 +39,7 @@ func (r *cacheInvalidator) InvalidateCache(
 	for h := range refs.ResponseIDs() {
 		del(h)
 	}
-	_ = r.invalidateLocationHeaders(reqURL, respHeader, del)
+	r.invalidateLocationHeaders(reqURL, respHeader, del)
 	del(key)
 }
 
@@ -49,7 +49,7 @@ func (r *cacheInvalidator) invalidateLocationHeaders(
 	reqURL *url.URL,
 	respHeader http.Header,
 	deleteFn func(string),
-) (n int) {
+) {
 	for _, hdr := range locationHeaders {
 		loc := respHeader.Get(hdr)
 		if loc == "" {
@@ -69,5 +69,4 @@ func (r *cacheInvalidator) invalidateLocationHeaders(
 			deleteFn(urlKey)
 		}
 	}
-	return
 }
