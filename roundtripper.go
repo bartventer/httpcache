@@ -347,7 +347,7 @@ func (r *roundTripper) handleStaleWhileRevalidate(
 
 func (r *roundTripper) performBackgroundRevalidation(
 	req *http.Request,
-	storedEntry *internal.Response,
+	stored *internal.Response,
 	urlKey string,
 	freshness *internal.Freshness,
 	ccReq internal.CCRequestDirectives,
@@ -357,56 +357,52 @@ func (r *roundTripper) performBackgroundRevalidation(
 		slog.String("url", req.URL.String()),
 		slog.String("urlKey", urlKey),
 	)
-
 	ctx, cancel := context.WithTimeout(req.Context(), r.swrTimeout)
 	defer cancel()
 	req = req.WithContext(ctx)
-
-	done := make(chan struct{})
-	var swrErr error
+	errc := make(chan error, 1)
 	go func() {
-		defer close(done)
+		defer close(errc)
 		sl.Debug("SWR background revalidation started")
-		swrErr = r.backgroundRevalidate(req, storedEntry, urlKey, freshness, ccReq)
+		//nolint:bodyclose // The response is not used, so we don't need to close it.
+		resp, start, end, err := r.roundTripTimed(req)
+		if err != nil {
+			errc <- fmt.Errorf("background revalidation failed: %w", err)
+			return
+		}
+		select {
+		case <-ctx.Done():
+			errc <- req.Context().Err()
+			return
+		default:
+		}
+		revalCtx := internal.RevalidationContext{
+			URLKey:    urlKey,
+			Start:     start,
+			End:       end,
+			CCReq:     ccReq,
+			Stored:    stored,
+			Freshness: freshness,
+		}
+		//nolint:bodyclose // The response is not used, so we don't need to close it.
+		_, err = r.vrh.HandleValidationResponse(revalCtx, req, resp, nil)
+		select {
+		case <-ctx.Done():
+			errc <- ctx.Err()
+		case errc <- err:
+		}
 	}()
+
 	select {
 	case <-ctx.Done():
 		sl.Debug("SWR background revalidation timeout")
-	case <-done:
+	case swrErr := <-errc:
 		if swrErr != nil {
 			sl.Error("SWR background revalidation error", slog.Any("error", swrErr))
 		} else {
 			sl.Debug("SWR background revalidation done")
 		}
 	}
-}
-
-func (r *roundTripper) backgroundRevalidate(
-	req *http.Request,
-	stored *internal.Response,
-	urlKey string,
-	freshness *internal.Freshness,
-	ccReq internal.CCRequestDirectives,
-) error {
-	//nolint:bodyclose // The response is not used, so we don't need to close it.
-	resp, start, end, err := r.roundTripTimed(req)
-	if err != nil {
-		return fmt.Errorf("background revalidation failed: %w", err)
-	}
-	if ctxErr := req.Context().Err(); ctxErr != nil {
-		return ctxErr
-	}
-	ctx := internal.RevalidationContext{
-		URLKey:    urlKey,
-		Start:     start,
-		End:       end,
-		CCReq:     ccReq,
-		Stored:    stored,
-		Freshness: freshness,
-	}
-	//nolint:bodyclose // The response is not used, so we don't need to close it.
-	_, err = r.vrh.HandleValidationResponse(ctx, req, resp, nil)
-	return err
 }
 
 func (r *roundTripper) roundTripTimed(
