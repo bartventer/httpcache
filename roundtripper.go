@@ -371,7 +371,7 @@ func (r *roundTripper) performBackgroundRevalidation(
 			return
 		}
 		select {
-		case <-ctx.Done():
+		case <-req.Context().Done():
 			errc <- req.Context().Err()
 			return
 		default:
@@ -386,11 +386,7 @@ func (r *roundTripper) performBackgroundRevalidation(
 		}
 		//nolint:bodyclose // The response is not used, so we don't need to close it.
 		_, err = r.vrh.HandleValidationResponse(revalCtx, req, resp, nil)
-		select {
-		case <-ctx.Done():
-			errc <- ctx.Err()
-		case errc <- err:
-		}
+		errc <- err
 	}()
 
 	select {
