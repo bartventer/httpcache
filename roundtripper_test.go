@@ -26,12 +26,12 @@ func newTestRoundTripper(fields func(rt *roundTripper)) *roundTripper {
 		rmc: &internal.MockRequestMethodChecker{
 			IsRequestMethodUnderstoodFunc: func(req *http.Request) bool { return true },
 		},
-		vmc: &internal.MockVaryMatcher{
+		vm: &internal.MockVaryMatcher{
 			VaryHeadersMatchFunc: func(cachedHdrs internal.ResponseRefs, reqHdr http.Header) (int, bool) {
 				return 0, true
 			},
 		},
-		cke: &internal.MockCacheKeyer{
+		uk: &internal.MockCacheKeyer{
 			CacheKeyFunc: func(u *url.URL) string { return "key" },
 		},
 		fc: &internal.MockFreshnessCalculator{
@@ -46,7 +46,7 @@ func newTestRoundTripper(fields func(rt *roundTripper)) *roundTripper {
 		siep: &internal.MockStaleIfErrorPolicy{},
 		ci:   &internal.MockCacheInvalidator{},
 		rs:   &internal.MockResponseStorer{},
-		vh: &internal.MockValidationResponseHandler{
+		vrh: &internal.MockValidationResponseHandler{
 			HandleValidationResponseFunc: func(ctx internal.RevalidationContext, req *http.Request, resp *http.Response, err error) (*http.Response, error) {
 				return resp, err
 			},
@@ -204,7 +204,7 @@ func TestRoundTripper_CacheHit_MustRevalidate_Stale(t *testing.T) {
 				return &internal.Freshness{IsStale: true, Age: &internal.Age{}, UsefulLife: 0}
 			},
 		}
-		rt.vh = &internal.MockValidationResponseHandler{
+		rt.vrh = &internal.MockValidationResponseHandler{
 			HandleValidationResponseFunc: func(ctx internal.RevalidationContext, req *http.Request, resp *http.Response, err error) (*http.Response, error) {
 				mockVHCalled = true
 				return resp, err
@@ -239,7 +239,7 @@ func TestRoundTripper_CacheHit_NoCacheUnqualified(t *testing.T) {
 				return internal.ResponseRefs{{}}, nil
 			},
 		}
-		rt.vh = &internal.MockValidationResponseHandler{
+		rt.vrh = &internal.MockValidationResponseHandler{
 			HandleValidationResponseFunc: func(ctx internal.RevalidationContext, req *http.Request, resp *http.Response, err error) (*http.Response, error) {
 				mockVHCalled = true
 				return resp, err
@@ -430,7 +430,7 @@ func TestRoundTripper_OnlyIfCached504(t *testing.T) {
 				return internal.ResponseRefs{{}}, nil
 			},
 		}
-		rt.vmc = &internal.MockVaryMatcher{
+		rt.vm = &internal.MockVaryMatcher{
 			VaryHeadersMatchFunc: func(cachedHdrs internal.ResponseRefs, reqHdr http.Header) (int, bool) {
 				return 0, true
 			},
@@ -454,7 +454,7 @@ func TestRoundTripper_CacheMissWithError(t *testing.T) {
 				return internal.ResponseRefs{{}}, nil
 			},
 		}
-		rt.vmc = &internal.MockVaryMatcher{
+		rt.vm = &internal.MockVaryMatcher{
 			VaryHeadersMatchFunc: func(cachedHdrs internal.ResponseRefs, reqHdr http.Header) (int, bool) {
 				return 0, true
 			},
@@ -491,7 +491,7 @@ func TestRoundTripper_RevalidationPath(t *testing.T) {
 				return internal.ResponseRefs{{}}, nil
 			},
 		}
-		rt.vmc = &internal.MockVaryMatcher{
+		rt.vm = &internal.MockVaryMatcher{
 			VaryHeadersMatchFunc: func(cachedHdrs internal.ResponseRefs, reqHdr http.Header) (int, bool) {
 				return 0, true
 			},
@@ -519,7 +519,7 @@ func TestRoundTripper_RevalidationPath(t *testing.T) {
 				}, nil
 			},
 		}
-		rt.vh = &internal.MockValidationResponseHandler{
+		rt.vrh = &internal.MockValidationResponseHandler{
 			HandleValidationResponseFunc: func(ctx internal.RevalidationContext, req *http.Request, resp *http.Response, err error) (*http.Response, error) {
 				mockVHCalled = true
 				internal.CacheStatusRevalidated.ApplyTo(resp.Header)
@@ -557,7 +557,7 @@ func TestRoundTripper_SWR_NormalPath(t *testing.T) {
 				return internal.ResponseRefs{{}}, nil
 			},
 		}
-		rt.vmc = &internal.MockVaryMatcher{
+		rt.vm = &internal.MockVaryMatcher{
 			VaryHeadersMatchFunc: func(cachedHdrs internal.ResponseRefs, reqHdr http.Header) (int, bool) {
 				return 0, true
 			},
@@ -576,7 +576,7 @@ func TestRoundTripper_SWR_NormalPath(t *testing.T) {
 		}
 		rt.clock = &internal.MockClock{NowResult: base.Add(5 * time.Second), SinceResult: 0}
 		rt.siep = &internal.MockStaleIfErrorPolicy{}
-		rt.vh = &internal.MockValidationResponseHandler{
+		rt.vrh = &internal.MockValidationResponseHandler{
 			HandleValidationResponseFunc: func(ctx internal.RevalidationContext, req *http.Request, resp *http.Response, err error) (*http.Response, error) {
 				revalidateCalled <- struct{}{} // Signal that revalidation was called
 				return resp, err
@@ -630,7 +630,7 @@ func TestRoundTripper_SWR_NormalPathAndError(t *testing.T) {
 				return internal.ResponseRefs{{}}, nil
 			},
 		}
-		rt.vmc = &internal.MockVaryMatcher{
+		rt.vm = &internal.MockVaryMatcher{
 			VaryHeadersMatchFunc: func(cachedHdrs internal.ResponseRefs, reqHdr http.Header) (int, bool) {
 				return 0, true
 			},
@@ -649,7 +649,7 @@ func TestRoundTripper_SWR_NormalPathAndError(t *testing.T) {
 		}
 		rt.clock = &internal.MockClock{NowResult: base.Add(5 * time.Second), SinceResult: 0}
 		rt.swrTimeout = swrTimeout
-		rt.vh = &internal.MockValidationResponseHandler{
+		rt.vrh = &internal.MockValidationResponseHandler{
 			HandleValidationResponseFunc: func(ctx internal.RevalidationContext, req *http.Request, resp *http.Response, err error) (*http.Response, error) {
 				defer func() { revalidateCalled <- struct{}{} }() // Signal that revalidation was called
 				return nil, errors.New("revalidation error")
@@ -697,7 +697,7 @@ func TestRoundTripper_SWR_Timeout(t *testing.T) {
 				return internal.ResponseRefs{{}}, nil
 			},
 		}
-		rt.vmc = &internal.MockVaryMatcher{
+		rt.vm = &internal.MockVaryMatcher{
 			VaryHeadersMatchFunc: func(cachedHdrs internal.ResponseRefs, reqHdr http.Header) (int, bool) {
 				return 0, true
 			},
@@ -716,7 +716,7 @@ func TestRoundTripper_SWR_Timeout(t *testing.T) {
 		}
 		rt.clock = &internal.MockClock{NowResult: base.Add(5 * time.Second), SinceResult: 0}
 		rt.swrTimeout = swrTimeout
-		rt.vh = &internal.MockValidationResponseHandler{
+		rt.vrh = &internal.MockValidationResponseHandler{
 			HandleValidationResponseFunc: func(ctx internal.RevalidationContext, req *http.Request, resp *http.Response, err error) (*http.Response, error) {
 				revalidateCalled <- struct{}{} // Signal that revalidation was called
 				return resp, err

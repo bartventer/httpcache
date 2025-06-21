@@ -95,14 +95,14 @@ type roundTripper struct {
 	// Internal details
 
 	rmc   internal.RequestMethodChecker      // Checks if HTTP request methods are understood
-	vmc   internal.VaryMatcher               // Matches Vary headers to determine cache validity
-	cke   internal.URLKeyer                  // Generates unique cache keys for requests
+	vm    internal.VaryMatcher               // Matches Vary headers to determine cache validity
+	uk    internal.URLKeyer                  // Generates unique cache keys for requests
 	fc    internal.FreshnessCalculator       // Calculates the freshness of cached responses
 	ce    internal.CacheabilityEvaluator     // Evaluates if a response is cacheable
 	siep  internal.StaleIfErrorPolicy        // Handles stale-if-error caching policies
 	ci    internal.CacheInvalidator          // Invalidates cache entries based on conditions
 	rs    internal.ResponseStorer            // Stores HTTP responses in the cache
-	vh    internal.ValidationResponseHandler // Processes validation responses for revalidation
+	vrh   internal.ValidationResponseHandler // Processes validation responses for revalidation
 	clock internal.Clock                     // Provides time-related operations, can be mocked for testing
 }
 
@@ -155,20 +155,20 @@ func newTransport(cache store.Cache, options ...Option) http.RoundTripper {
 	rt := &roundTripper{
 		cache: internal.NewResponseCache(cache),
 		rmc:   internal.NewRequestMethodChecker(),
-		vmc:   internal.NewVaryMatcher(internal.NewHeaderValueNormalizer()),
-		cke:   internal.NewURLKeyer(),
+		vm:    internal.NewVaryMatcher(internal.NewHeaderValueNormalizer()),
+		uk:    internal.NewURLKeyer(),
 		ce:    internal.NewCacheabilityEvaluator(),
 		clock: internal.NewClock(),
 	}
 	rt.fc = internal.NewFreshnessCalculator(rt.clock)
-	rt.ci = internal.NewCacheInvalidator(rt.cache, rt.cke)
+	rt.ci = internal.NewCacheInvalidator(rt.cache, rt.uk)
 	rt.siep = internal.NewStaleIfErrorPolicy(rt.clock)
 	rt.rs = internal.NewResponseStorer(
 		rt.cache,
 		internal.NewVaryHeaderNormalizer(),
 		internal.NewVaryKeyer(),
 	)
-	rt.vh = internal.NewValidationResponseHandler(rt.clock, rt.ci, rt.ce, rt.siep, rt.rs)
+	rt.vrh = internal.NewValidationResponseHandler(rt.clock, rt.ci, rt.ce, rt.siep, rt.rs)
 
 	for _, opt := range options {
 		opt.apply(rt)
@@ -182,7 +182,7 @@ func newTransport(cache store.Cache, options ...Option) http.RoundTripper {
 var _ http.RoundTripper = (*roundTripper)(nil)
 
 func (r *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	urlKey := r.cke.URLKey(req.URL)
+	urlKey := r.uk.URLKey(req.URL)
 
 	if !r.rmc.IsRequestMethodUnderstood(req) {
 		return r.handleUnrecognizedMethod(req, urlKey)
@@ -193,27 +193,27 @@ func (r *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 		return r.handleCacheMiss(req, urlKey, nil, -1)
 	}
 
-	refIdx, found := r.vmc.VaryHeadersMatch(refs, req.Header)
+	refIndex, found := r.vm.VaryHeadersMatch(refs, req.Header)
 	if !found {
 		return r.handleCacheMiss(req, urlKey, refs, -1)
 	}
 
-	entry, err := r.cache.Get(refs[refIdx].ResponseID, req)
+	entry, err := r.cache.Get(refs[refIndex].ResponseID, req)
 	if err != nil || entry == nil {
 		r.logger.Warn(
 			"Cache reference found but entry missing or unreadable; possible cache corruption or concurrent eviction. Falling back to cache miss.",
 			slog.String("url", req.URL.String()),
 			slog.String("method", req.Method),
 			slog.String("cacheKey", urlKey),
-			slog.Int("refIndex", refIdx),
-			slog.String("vary", refs[refIdx].Vary),
-			slog.String("responseID", refs[refIdx].ResponseID),
+			slog.Int("refIndex", refIndex),
+			slog.String("vary", refs[refIndex].Vary),
+			slog.String("responseID", refs[refIndex].ResponseID),
 			slog.Any("error", err),
 		)
-		return r.handleCacheMiss(req, urlKey, refs, refIdx)
+		return r.handleCacheMiss(req, urlKey, refs, refIndex)
 	}
 
-	return r.handleCacheHit(req, entry, urlKey, refs, refIdx)
+	return r.handleCacheHit(req, entry, urlKey, refs, refIndex)
 }
 
 func (r *roundTripper) handleUnrecognizedMethod(
@@ -243,7 +243,7 @@ func (r *roundTripper) handleUnrecognizedMethod(
 func (r *roundTripper) handleCacheMiss(
 	req *http.Request,
 	urlKey string,
-	headers internal.ResponseRefs,
+	refs internal.ResponseRefs,
 	refIndex int,
 ) (*http.Response, error) {
 	ccReq := internal.ParseCCRequestDirectives(req.Header)
@@ -256,7 +256,7 @@ func (r *roundTripper) handleCacheMiss(
 	}
 	ccResp := internal.ParseCCResponseDirectives(resp.Header)
 	if r.ce.CanStoreResponse(resp, ccReq, ccResp) {
-		_ = r.rs.StoreResponse(resp, urlKey, headers, start, end, refIndex)
+		_ = r.rs.StoreResponse(resp, urlKey, refs, start, end, refIndex)
 	}
 	internal.CacheStatusMiss.ApplyTo(resp.Header)
 	return resp, nil
@@ -314,11 +314,11 @@ revalidate:
 		RefIndex:  refIndex,
 		Freshness: freshness,
 	}
-	return r.vh.HandleValidationResponse(ctx, req, resp, err)
+	return r.vrh.HandleValidationResponse(ctx, req, resp, err)
 }
 
 func (r *roundTripper) serveFromCache(
-	storedEntry *internal.Response,
+	stored *internal.Response,
 	freshness *internal.Freshness,
 	noCacheQualified bool,
 	noCacheFieldsSeq iter.Seq[string],
@@ -326,39 +326,39 @@ func (r *roundTripper) serveFromCache(
 	if noCacheQualified {
 		//Qualified no-cache: may serve from cache with fields stripped
 		for field := range noCacheFieldsSeq {
-			storedEntry.Data.Header.Del(field)
+			stored.Data.Header.Del(field)
 		}
 	}
-	internal.SetAgeHeader(storedEntry.Data, r.clock, freshness.Age)
-	internal.CacheStatusHit.ApplyTo(storedEntry.Data.Header)
-	return storedEntry.Data, nil
+	internal.SetAgeHeader(stored.Data, r.clock, freshness.Age)
+	internal.CacheStatusHit.ApplyTo(stored.Data.Header)
+	return stored.Data, nil
 }
 
 func (r *roundTripper) handleStaleWhileRevalidate(
 	req *http.Request,
-	storedEntry *internal.Response,
-	cacheKey string,
+	stored *internal.Response,
+	urlKey string,
 	freshness *internal.Freshness,
 	ccReq internal.CCRequestDirectives,
 ) (*http.Response, error) {
 	req2 := req.Clone(req.Context())
-	req2 = withConditionalHeaders(req2, storedEntry.Data.Header)
-	go r.performBackgroundRevalidation(req2, storedEntry, cacheKey, freshness, ccReq)
-	internal.CacheStatusStale.ApplyTo(storedEntry.Data.Header)
-	return storedEntry.Data, nil
+	req2 = withConditionalHeaders(req2, stored.Data.Header)
+	go r.performBackgroundRevalidation(req2, stored, urlKey, freshness, ccReq)
+	internal.CacheStatusStale.ApplyTo(stored.Data.Header)
+	return stored.Data, nil
 }
 
 func (r *roundTripper) performBackgroundRevalidation(
 	req *http.Request,
 	storedEntry *internal.Response,
-	cacheKey string,
+	urlKey string,
 	freshness *internal.Freshness,
 	ccReq internal.CCRequestDirectives,
 ) {
 	sl := r.logger.With(
 		slog.String("method", req.Method),
 		slog.String("url", req.URL.String()),
-		slog.String("cacheKey", cacheKey),
+		slog.String("urlKey", urlKey),
 	)
 
 	ctx, cancel := context.WithTimeout(req.Context(), r.swrTimeout)
@@ -370,7 +370,7 @@ func (r *roundTripper) performBackgroundRevalidation(
 	go func() {
 		defer close(done)
 		sl.Debug("SWR background revalidation started")
-		swrErr = r.backgroundRevalidate(req, storedEntry, cacheKey, freshness, ccReq)
+		swrErr = r.backgroundRevalidate(req, storedEntry, urlKey, freshness, ccReq)
 	}()
 	select {
 	case <-ctx.Done():
@@ -387,7 +387,7 @@ func (r *roundTripper) performBackgroundRevalidation(
 func (r *roundTripper) backgroundRevalidate(
 	req *http.Request,
 	stored *internal.Response,
-	cacheKey string,
+	urlKey string,
 	freshness *internal.Freshness,
 	ccReq internal.CCRequestDirectives,
 ) error {
@@ -400,7 +400,7 @@ func (r *roundTripper) backgroundRevalidate(
 		return ctxErr
 	}
 	ctx := internal.RevalidationContext{
-		URLKey:    cacheKey,
+		URLKey:    urlKey,
 		Start:     start,
 		End:       end,
 		CCReq:     ccReq,
@@ -408,7 +408,7 @@ func (r *roundTripper) backgroundRevalidate(
 		Freshness: freshness,
 	}
 	//nolint:bodyclose // The response is not used, so we don't need to close it.
-	_, err = r.vh.HandleValidationResponse(ctx, req, resp, nil)
+	_, err = r.vrh.HandleValidationResponse(ctx, req, resp, nil)
 	return err
 }
 
