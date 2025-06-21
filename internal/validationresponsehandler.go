@@ -90,11 +90,11 @@ func (r *validationResponseHandler) HandleValidationResponse(
 			_ = r.rs.StoreResponse(resp, ctx.URLKey, ctx.Refs, ctx.Start, ctx.End, ctx.RefIndex)
 			CacheStatusMiss.ApplyTo(resp.Header)
 		} else {
-			CacheStatusBypass.ApplyTo(resp.Header)
 			if IsUnsafeMethod(req) && IsNonErrorStatus(resp.StatusCode) {
 				// RFC 9111 §4.4 Invalidation of Cache Entries
 				r.ci.InvalidateCache(req.URL, resp.Header, ctx.Refs, ctx.URLKey)
 			}
+			CacheStatusBypass.ApplyTo(resp.Header)
 		}
 		return resp, nil
 	}
