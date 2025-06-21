@@ -5,6 +5,8 @@ import (
 	"time"
 )
 
+// CacheabilityEvaluator describes the interface implemented by types that can
+// evaluate whether a response can be stored in cache, according to RFC 9111 §3.
 type CacheabilityEvaluator interface {
 	CanStoreResponse(
 		resp *http.Response,
