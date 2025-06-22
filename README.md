@@ -15,6 +15,7 @@
 - **RFC 9111 Compliance**: Handles validation, expiration, and revalidation ([view full compliance details](#rfc-9111-compliance-matrix)).
 - **Cache Control**: Supports all required HTTP cache control directives, as well as extensions like `stale-while-revalidate`, `stale-if-error`, and `immutable` ([view details](#field-definitions-details)).
 - **Cache Backends**: Built-in support for file system and memory caches, with the ability to implement custom backends (see [Cache Backends](#cache-backends)).
+- **Cache Maintenance API**: Optional REST endpoints for listing, retrieving, and deleting cache entries (see [Cache Maintenance API](#cache-maintenance-api-debug-only)).
 - **Extensible**: Options for logging, transport and timeouts (see [Options](#options)).
 - **Debuggable**: Adds a cache status header to every response (see [Cache Status Header](#cache-status-header)).
 - **Zero Dependencies**: No external dependencies, pure Go implementation.
@@ -76,6 +77,32 @@ Consult the documentation for each backend for specific configuration options an
 ### Custom Cache Backends
 
 To implement a custom cache backend, create a type that satisfies the [`store/driver.Conn`](https://pkg.go.dev/github.com/bartventer/httpcache/store/driver#Conn) interface, then register it using the [`store.Register`](https://pkg.go.dev/github.com/bartventer/httpcache/store#Register) function. Refer to the built-in backends for examples of how to implement this interface.
+
+### Cache Maintenance API (Debug Only)
+
+A REST API is available for cache inspection and maintenance, intended for debugging and development use only. **Do not expose these endpoints in production.**
+
+**Endpoints:**
+- `GET    /debug/httpcache`           — List cache keys (if supported)
+- `GET    /debug/httpcache/{key}`     — Retrieve a cache entry
+- `DELETE /debug/httpcache/{key}`     — Delete a cache entry
+
+All endpoints require a `dsn` query parameter to select the cache backend.
+
+**Usage Example:**
+```go
+import (
+    "net/http"
+    "github.com/bartventer/httpcache/store/expapi"
+)
+
+func main() {
+    expapi.Register()
+    http.ListenAndServe(":8080", nil)
+}
+```
+
+To use a custom [ServeMux](https://pkg.go.dev/net/http#ServeMux), pass `expapi.WithServeMux(mux)` to `expapi.Register()`.
 
 ## Options
 
