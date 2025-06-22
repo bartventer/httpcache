@@ -75,7 +75,7 @@ Consult the documentation for each backend for specific configuration options an
 
 ### Custom Cache Backends
 
-To implement a custom cache backend, create a type that satisfies the [`store.Cache`](https://pkg.go.dev/github.com/bartventer/httpcache/store#Cache) interface, then register it using the [`store.Register`](https://pkg.go.dev/github.com/bartventer/httpcache/store#Register) function. Refer to the built-in backends for examples of how to implement this interface.
+To implement a custom cache backend, create a type that satisfies the [`store/driver.Conn`](https://pkg.go.dev/github.com/bartventer/httpcache/store/driver#Conn) interface, then register it using the [`store.Register`](https://pkg.go.dev/github.com/bartventer/httpcache/store#Register) function. Refer to the built-in backends for examples of how to implement this interface.
 
 ## Options
 

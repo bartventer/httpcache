@@ -2,8 +2,6 @@
 //
 // Entries are stored as files in a directory under the user's OS cache directory by default.
 // The cache location is configured via URL; see [Open] for details.
-//
-// Users should call [fsCache.Close] on the cache when done to release resources promptly.
 package fscache
 
 import (
@@ -16,13 +14,14 @@ import (
 	"strings"
 
 	"github.com/bartventer/httpcache/store"
+	"github.com/bartventer/httpcache/store/driver"
 )
 
 const Scheme = "fscache" // url scheme for the file system cache
 
 //nolint:gochecknoinits // We use init to register the driver.
 func init() {
-	store.Register(Scheme, store.DriverFunc(func(u *url.URL) (store.Cache, error) {
+	store.Register(Scheme, driver.DriverFunc(func(u *url.URL) (driver.Conn, error) {
 		return Open(u)
 	}))
 }
@@ -91,14 +90,14 @@ func (f fileNamerFunc) FileName(key string) string {
 	return f(key)
 }
 
-var _ store.Cache = (*fsCache)(nil)
+var _ driver.Conn = (*fsCache)(nil)
 
 func (c *fsCache) Get(key string) ([]byte, error) {
 	f, err := c.root.Open(c.fn.FileName(key))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			err = errors.Join(
-				store.ErrNotExist,
+				driver.ErrNotExist,
 				fmt.Errorf("fscache: entry for key %q does not exist: %w", key, err),
 			)
 		}
@@ -123,20 +122,11 @@ func (c *fsCache) Delete(key string) error {
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			err = errors.Join(
-				store.ErrNotExist,
+				driver.ErrNotExist,
 				fmt.Errorf("fscache: entry for key %q does not exist: %w", key, err),
 			)
 		}
 		return err
 	}
 	return nil
-}
-
-// Close releases resources held by the cache.
-//
-// Users should always call Close when finished with the cache to promptly release
-// OS resources. If Close is not called, resources will eventually be released by
-// a finalizer, but this may happen much later.
-func (c *fsCache) Close() error {
-	return c.root.Close()
 }

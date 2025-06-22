@@ -44,6 +44,7 @@ import (
 
 	"github.com/bartventer/httpcache/internal"
 	"github.com/bartventer/httpcache/store"
+	"github.com/bartventer/httpcache/store/driver"
 )
 
 const CacheStatusHeader = internal.CacheStatusHeader
@@ -148,9 +149,9 @@ func NewTransport(dsn string, options ...Option) http.RoundTripper {
 	return newTransport(cache, options...)
 }
 
-func newTransport(cache store.Cache, options ...Option) http.RoundTripper {
+func newTransport(conn driver.Conn, options ...Option) http.RoundTripper {
 	rt := &roundTripper{
-		cache: internal.NewResponseCache(cache),
+		cache: internal.NewResponseCache(conn),
 		rmc:   internal.NewRequestMethodChecker(),
 		vm:    internal.NewVaryMatcher(internal.NewHeaderValueNormalizer()),
 		uk:    internal.NewURLKeyer(),

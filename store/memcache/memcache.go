@@ -11,13 +11,14 @@ import (
 	"sync"
 
 	"github.com/bartventer/httpcache/store"
+	"github.com/bartventer/httpcache/store/driver"
 )
 
 const Scheme = "memcache"
 
 //nolint:gochecknoinits // We use init to register the driver.
 func init() {
-	store.Register(Scheme, store.DriverFunc(func(u *url.URL) (store.Cache, error) {
+	store.Register(Scheme, driver.DriverFunc(func(u *url.URL) (driver.Conn, error) {
 		return Open(u), nil
 	}))
 }
@@ -36,7 +37,7 @@ func Open(_ *url.URL) *memCache {
 	}
 }
 
-var _ store.Cache = (*memCache)(nil)
+var _ driver.Conn = (*memCache)(nil)
 
 func (c *memCache) Get(key string) ([]byte, error) {
 	c.mu.RLock()
@@ -44,7 +45,7 @@ func (c *memCache) Get(key string) ([]byte, error) {
 	val, ok := c.store[key]
 	if !ok {
 		return nil, errors.Join(
-			store.ErrNotExist,
+			driver.ErrNotExist,
 			fmt.Errorf("memcache: key %q does not exist", key),
 		)
 	}
@@ -69,7 +70,7 @@ func (c *memCache) Delete(key string) error {
 	defer c.mu.Unlock()
 	if _, ok := c.store[key]; !ok {
 		return errors.Join(
-			store.ErrNotExist,
+			driver.ErrNotExist,
 			fmt.Errorf("memcache: key %q does not exist", key),
 		)
 	}

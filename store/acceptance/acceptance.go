@@ -1,4 +1,4 @@
-// Package acceptancetest provides a suite of acceptance tests for Cache implementations.
+// Package acceptance provides a suite of acceptance tests for Cache implementations.
 package acceptance
 
 import (
@@ -6,16 +6,16 @@ import (
 	"testing"
 
 	"github.com/bartventer/httpcache/internal/testutil"
-	"github.com/bartventer/httpcache/store"
+	"github.com/bartventer/httpcache/store/driver"
 )
 
 type Factory interface {
-	Make() (cache store.Cache, cleanup func())
+	Make() (cache driver.Conn, cleanup func())
 }
 
-type FactoryFunc func() (store.Cache, func())
+type FactoryFunc func() (driver.Conn, func())
 
-func (f FactoryFunc) Make() (store.Cache, func()) { return f() }
+func (f FactoryFunc) Make() (driver.Conn, func()) { return f() }
 
 // Run runs a standard suite of tests against the provided Cache implementation.
 // The factory function must return a new, empty Cache for each test.
@@ -70,7 +70,7 @@ func testDelete(t *testing.T, factory FactoryFunc) {
 	testutil.RequireErrorIs(
 		t,
 		err,
-		store.ErrNotExist,
+		driver.ErrNotExist,
 		"Get after delete did not return ErrNotExist",
 	)
 }
@@ -83,7 +83,7 @@ func testGetNonexistent(t *testing.T, factory FactoryFunc) {
 	testutil.RequireErrorIs(
 		t,
 		err,
-		store.ErrNotExist,
+		driver.ErrNotExist,
 		"Get non-existent key did not return ErrNotExist",
 	)
 }
@@ -96,7 +96,7 @@ func testDeleteNonexistent(t *testing.T, factory FactoryFunc) {
 	testutil.RequireErrorIs(
 		t,
 		err,
-		store.ErrNotExist,
+		driver.ErrNotExist,
 		"Delete non-existent key did not return ErrNotExist",
 	)
 }

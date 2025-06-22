@@ -5,9 +5,11 @@ import (
 	"testing"
 
 	"github.com/bartventer/httpcache/internal/testutil"
-	"github.com/bartventer/httpcache/store"
 	"github.com/bartventer/httpcache/store/acceptance"
+	"github.com/bartventer/httpcache/store/driver"
 )
+
+func (c *fsCache) Close() error { return c.root.Close() }
 
 func makeRoot(t testing.TB) *url.URL {
 	t.Helper()
@@ -19,7 +21,7 @@ func makeRoot(t testing.TB) *url.URL {
 }
 
 func TestFSCache_Acceptance(t *testing.T) {
-	acceptance.Run(t, acceptance.FactoryFunc(func() (store.Cache, func()) {
+	acceptance.Run(t, acceptance.FactoryFunc(func() (driver.Conn, func()) {
 		u := makeRoot(t)
 		cache, err := Open(u)
 		testutil.RequireNoError(t, err, "Failed to create fscache")

@@ -7,7 +7,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/bartventer/httpcache/store"
+	"github.com/bartventer/httpcache/store/driver"
 )
 
 // RunB runs the acceptance tests for a Cache implementation in a benchmark context.
@@ -57,7 +57,7 @@ func benchmarkDelete(b *testing.B, factory FactoryFunc, key string) {
 	}
 
 	for b.Loop() {
-		if err := cache.Delete(key); err != nil && !errors.Is(err, store.ErrNotExist) {
+		if err := cache.Delete(key); err != nil && !errors.Is(err, driver.ErrNotExist) {
 			b.Errorf("Delete failed: %v", err)
 		}
 	}
