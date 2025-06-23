@@ -1,8 +1,10 @@
 package fscache
 
 import (
+	"io/fs"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/bartventer/httpcache/internal/testutil"
 	"github.com/bartventer/httpcache/store/acceptance"
@@ -41,6 +43,27 @@ func Test_fsCache_SetError(t *testing.T) {
 	})
 	err = cache.Set("../../invalid", []byte("value"))
 	testutil.RequireError(t, err)
+}
+
+func Test_fsCache_KeysError(t *testing.T) {
+	u := makeRoot(t)
+	cache, err := Open(u)
+	testutil.RequireNoError(t, err, "Failed to create fscache")
+	t.Cleanup(func() { cache.Close() })
+
+	cache.fn = fileNamerFunc(func(key string) string {
+		return key
+	})
+	cache.fnk = fileNameKeyerFunc(func(name string) string {
+		return name
+	})
+	cache.dw = dirWalkerFunc(func(root string, fn fs.WalkDirFunc) error {
+		return testutil.ErrSample
+	})
+	keys, err := cache.Keys("")
+	var expectedErr *Error
+	testutil.RequireErrorAs(t, err, &expectedErr)
+	testutil.AssertEqual(t, 0, len(keys), "Expected no keys for invalid path")
 }
 
 func TestOpen(t *testing.T) {
@@ -119,6 +142,25 @@ func TestOpen(t *testing.T) {
 			}
 			got, err := Open(u)
 			tt.assertion(t, got, err)
+		})
+	}
+}
+
+func Test_parseTimeout(t *testing.T) {
+	tests := []struct {
+		name string
+		v    string
+		want time.Duration
+	}{
+		{"empty", "", defaultTimeout},
+		{"valid", "5s", 5 * time.Second},
+		{"invalid", "invalid", defaultTimeout},
+		{"negative", "-1s", defaultTimeout},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseTimeout(tt.v)
+			testutil.AssertEqual(t, tt.want, got, "parseTimeout(%q)", tt.v)
 		})
 	}
 }
