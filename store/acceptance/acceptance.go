@@ -3,10 +3,12 @@ package acceptance
 
 import (
 	"bytes"
+	"slices"
 	"testing"
 
 	"github.com/bartventer/httpcache/internal/testutil"
 	"github.com/bartventer/httpcache/store/driver"
+	"github.com/bartventer/httpcache/store/expapi"
 )
 
 type Factory interface {
@@ -26,6 +28,7 @@ func Run(t *testing.T, factory Factory) {
 	t.Run("Delete", func(t *testing.T) { testDelete(t, factory.Make) })
 	t.Run("GetNonexistent", func(t *testing.T) { testGetNonexistent(t, factory.Make) })
 	t.Run("DeleteNonexistent", func(t *testing.T) { testDeleteNonexistent(t, factory.Make) })
+	t.Run("Keys", func(t *testing.T) { testKeys(t, factory.Make) })
 }
 
 func testSetAndGet(t *testing.T, factory FactoryFunc) {
@@ -98,5 +101,29 @@ func testDeleteNonexistent(t *testing.T, factory FactoryFunc) {
 		err,
 		driver.ErrNotExist,
 		"Delete non-existent key did not return ErrNotExist",
+	)
+}
+
+func testKeys(t *testing.T, factory FactoryFunc) {
+	cache, cleanup := factory.Make()
+	t.Cleanup(cleanup)
+
+	kl, ok := cache.(expapi.KeyLister)
+	if !ok {
+		t.Skip("Cache implementation does not support key listing")
+	}
+	keys := []string{"foo", "bar", "baz"}
+	for _, key := range keys {
+		value := []byte("value for " + key)
+		testutil.RequireNoError(t, cache.Set(key, value), "Set failed for key "+key)
+	}
+	gotKeys, err := kl.Keys("")
+	testutil.RequireNoError(t, err, "Keys retrieval failed")
+	slices.Sort(gotKeys)
+	slices.Sort(keys)
+	testutil.AssertTrue(
+		t,
+		slices.Equal(gotKeys, keys),
+		"Keys did not match expected keys",
 	)
 }

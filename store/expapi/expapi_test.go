@@ -26,13 +26,16 @@ type mockHTTPCache struct {
 	GetFunc    func(key string) ([]byte, error)
 	SetFunc    func(key string, value []byte) error
 	DeleteFunc func(key string) error
-	KeysFunc   func(prefix string) []string
+	KeysFunc   func(prefix string) ([]string, error)
 }
 
-func (m *mockHTTPCache) Get(key string) ([]byte, error)     { return m.GetFunc(key) }
-func (m *mockHTTPCache) Set(key string, value []byte) error { return m.SetFunc(key, value) }
-func (m *mockHTTPCache) Delete(key string) error            { return m.DeleteFunc(key) }
-func (m *mockHTTPCache) Keys(prefix string) []string        { return m.KeysFunc(prefix) }
+var _ driver.Conn = (*mockHTTPCache)(nil)
+var _ KeyLister = (*mockHTTPCache)(nil)
+
+func (m *mockHTTPCache) Get(key string) ([]byte, error)       { return m.GetFunc(key) }
+func (m *mockHTTPCache) Set(key string, value []byte) error   { return m.SetFunc(key, value) }
+func (m *mockHTTPCache) Delete(key string) error              { return m.DeleteFunc(key) }
+func (m *mockHTTPCache) Keys(prefix string) ([]string, error) { return m.KeysFunc(prefix) }
 
 func Test_storeService_OpenError(t *testing.T) {
 	co := &mockConnOpener{
@@ -79,9 +82,7 @@ func Test_storeService_handlers(t *testing.T) {
 				method: http.MethodGet,
 				url:    "/debug/httpcache?dsn=foo&prefix=key",
 				cache: &mockHTTPCache{
-					KeysFunc: func(prefix string) []string {
-						return []string{"key1", "key2"}
-					},
+					KeysFunc: func(prefix string) ([]string, error) { return []string{"key1", "key2"}, nil },
 				},
 			},
 			assertion: func(t *testing.T, rr *httptest.ResponseRecorder) {
@@ -90,6 +91,23 @@ func Test_storeService_handlers(t *testing.T) {
 				err := json.Unmarshal(rr.Body.Bytes(), &resp)
 				testutil.RequireNoError(t, err)
 				testutil.AssertTrue(t, slices.Equal(resp["keys"], []string{"key1", "key2"}))
+			},
+		},
+		{
+			name: "List with Error",
+			args: args{
+				method: http.MethodGet,
+				url:    "/debug/httpcache?dsn=foo&prefix=key",
+				cache: &mockHTTPCache{
+					KeysFunc: func(prefix string) ([]string, error) { return nil, testutil.ErrSample },
+				},
+			},
+			assertion: func(t *testing.T, rr *httptest.ResponseRecorder) {
+				testutil.AssertEqual(t, http.StatusInternalServerError, rr.Code)
+				testutil.AssertTrue(
+					t,
+					strings.Contains(rr.Body.String(), "failed to list keys"),
+				)
 			},
 		},
 		{
