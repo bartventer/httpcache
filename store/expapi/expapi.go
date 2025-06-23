@@ -28,7 +28,7 @@ type connOpener interface {
 	OpenConn(dsn string) (driver.Conn, error)
 }
 
-type kvMux struct {
+type storeService struct {
 	co connOpener
 }
 
@@ -36,126 +36,136 @@ type kvMux struct {
 // support listing keys. It provides a method to retrieve all keys in the
 // cache that match a given prefix.
 type KeyLister interface {
-	Keys(prefix string) []string
+	Keys(prefix string) ([]string, error)
 }
 
-func dsnFromRequest(r *http.Request) string { return r.URL.Query().Get("dsn") }
 func keyFromRequest(r *http.Request) string { return r.PathValue("key") }
 
-func (m *kvMux) list(w http.ResponseWriter, r *http.Request) {
-	conn, err := m.co.OpenConn(dsnFromRequest(r))
-	if err != nil {
-		http.Error(w, fmt.Sprintf("failed to open cache: %v", err), http.StatusInternalServerError)
-		return
-	}
-	kl, ok := conn.(KeyLister)
-	if !ok {
-		http.Error(w, "cache does not support listing keys", http.StatusNotImplemented)
-		return
-	}
-	prefix := r.URL.Query().Get("prefix")
-	keys := kl.Keys(prefix)
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string][]string{"keys": keys})
-}
-
-func (m *kvMux) retrieve(w http.ResponseWriter, r *http.Request) {
-	conn, err := m.co.OpenConn(dsnFromRequest(r))
-	if err != nil {
-		http.Error(w, fmt.Sprintf("failed to open cache: %v", err), http.StatusInternalServerError)
-		return
-	}
-	key := keyFromRequest(r)
-	value, err := conn.Get(key)
-	if err != nil {
-		if errors.Is(err, driver.ErrNotExist) {
-			http.Error(w, fmt.Sprintf("key %q not found", key), http.StatusNotFound)
-		} else {
-			http.Error(w, fmt.Sprintf("failed to get value for key %q: %v", key, err), http.StatusInternalServerError)
+func connHandler(co connOpener, handler func(driver.Conn) http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		dsn := r.URL.Query().Get("dsn")
+		conn, err := co.OpenConn(dsn)
+		if err != nil {
+			http.Error(w, "failed to open cache: "+err.Error(), http.StatusInternalServerError)
+			return
 		}
-		return
-	}
-	w.Header().Set("Content-Type", "application/octet-stream")
-	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write(value); err != nil {
-		http.Error(
-			w,
-			fmt.Sprintf("failed to write response: %v", err),
-			http.StatusInternalServerError,
-		)
-	}
+		handler(conn).ServeHTTP(w, r)
+	})
 }
 
-func (m *kvMux) destroy(w http.ResponseWriter, r *http.Request) {
-	conn, err := m.co.OpenConn(dsnFromRequest(r))
-	if err != nil {
-		http.Error(w, fmt.Sprintf("failed to open cache: %v", err), http.StatusInternalServerError)
-		return
-	}
-	key := keyFromRequest(r)
-	if err := conn.Delete(key); err != nil {
-		if errors.Is(err, driver.ErrNotExist) {
-			http.Error(w, fmt.Sprintf("key %q not found", key), http.StatusNotFound)
-		} else {
-			http.Error(w, fmt.Sprintf("failed to delete value for key %q: %v", key, err), http.StatusInternalServerError)
+func list(conn driver.Conn) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		kl, ok := conn.(KeyLister)
+		if !ok {
+			http.Error(w, "cache does not support listing keys", http.StatusNotImplemented)
+			return
 		}
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
+		prefix := r.URL.Query().Get("prefix")
+		keys, err := kl.Keys(prefix)
+		if err != nil {
+			http.Error(
+				w,
+				fmt.Sprintf("failed to list keys: %v", err),
+				http.StatusInternalServerError,
+			)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string][]string{"keys": keys})
+	})
 }
 
-type handlerConfig struct {
+func retrieve(conn driver.Conn) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		key := keyFromRequest(r)
+		value, err := conn.Get(key)
+		if err != nil {
+			if errors.Is(err, driver.ErrNotExist) {
+				http.Error(w, fmt.Sprintf("key %q not found", key), http.StatusNotFound)
+			} else {
+				http.Error(w, fmt.Sprintf("failed to get value for key %q: %v", key, err), http.StatusInternalServerError)
+			}
+			return
+		}
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.WriteHeader(http.StatusOK)
+		if _, err := w.Write(value); err != nil {
+			http.Error(
+				w,
+				fmt.Sprintf("failed to write response: %v", err),
+				http.StatusInternalServerError,
+			)
+		}
+	})
+}
+
+func destroy(conn driver.Conn) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		key := keyFromRequest(r)
+		if err := conn.Delete(key); err != nil {
+			if errors.Is(err, driver.ErrNotExist) {
+				http.Error(w, fmt.Sprintf("key %q not found", key), http.StatusNotFound)
+			} else {
+				http.Error(w, fmt.Sprintf("failed to delete value for key %q: %v", key, err), http.StatusInternalServerError)
+			}
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+}
+
+type registerConfig struct {
 	Mux *http.ServeMux
 }
 
-type HandlerOption interface {
-	apply(*handlerConfig)
+type RegisterOption interface {
+	apply(*registerConfig)
 }
 
-type handlerOptionFunc func(*handlerConfig)
+type registerOptionFunc func(*registerConfig)
 
-func (f handlerOptionFunc) apply(cfg *handlerConfig) {
+func (f registerOptionFunc) apply(cfg *registerConfig) {
 	f(cfg)
 }
 
 // WithServeMux allows specifying a custom http.ServeMux for the HTTP cache API
 // handlers; default: [http.DefaultServeMux].
-func WithServeMux(mux *http.ServeMux) HandlerOption {
-	return handlerOptionFunc(func(cfg *handlerConfig) {
+func WithServeMux(mux *http.ServeMux) RegisterOption {
+	return registerOptionFunc(func(cfg *registerConfig) {
 		cfg.Mux = mux
 	})
 }
 
-func (m *kvMux) Register(opts ...HandlerOption) {
-	cfg := &handlerConfig{
+func (m *storeService) Register(opts ...RegisterOption) {
+	cfg := &registerConfig{
 		Mux: http.DefaultServeMux,
 	}
 	for _, opt := range opts {
 		opt.apply(cfg)
 	}
 	mux := cfg.Mux
-	mux.HandleFunc("GET /debug/httpcache", m.list)
-	mux.HandleFunc("GET /debug/httpcache/{key}", m.retrieve)
-	mux.HandleFunc("DELETE /debug/httpcache/{key}", m.destroy)
+	mux.Handle("GET /debug/httpcache", connHandler(m.co, list))
+	mux.Handle("GET /debug/httpcache/{key}", connHandler(m.co, retrieve))
+	mux.Handle("DELETE /debug/httpcache/{key}", connHandler(m.co, destroy))
 }
 
-var defaultKVMux = &kvMux{co: registry.Default()}
+var defaultService = &storeService{co: registry.Default()}
 
 // Register registers the HTTP cache API handlers with the provided options.
-func Register(opts ...HandlerOption) { defaultKVMux.Register(opts...) }
+func Register(opts ...RegisterOption) { defaultService.Register(opts...) }
 
 // ListHandler returns the list handler for the HTTP cache API.
 //
 // This is only needed to install the handler in a non-standard location.
-func ListHandler() http.Handler { return http.HandlerFunc(defaultKVMux.list) }
+func ListHandler() http.Handler { return connHandler(defaultService.co, list) }
 
 // RetrieveHandler returns the retrieve handler for the HTTP cache API.
 //
 // This is only needed to install the handler in a non-standard location.
-func RetrieveHandler() http.Handler { return http.HandlerFunc(defaultKVMux.retrieve) }
+func RetrieveHandler() http.Handler { return connHandler(defaultService.co, retrieve) }
 
 // DestroyHandler returns the destroy handler for the HTTP cache API.
 //
 // This is only needed to install the handler in a non-standard location.
-func DestroyHandler() http.Handler { return http.HandlerFunc(defaultKVMux.destroy) }
+func DestroyHandler() http.Handler { return connHandler(defaultService.co, destroy) }

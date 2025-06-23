@@ -34,11 +34,11 @@ func (m *mockHTTPCache) Set(key string, value []byte) error { return m.SetFunc(k
 func (m *mockHTTPCache) Delete(key string) error            { return m.DeleteFunc(key) }
 func (m *mockHTTPCache) Keys(prefix string) []string        { return m.KeysFunc(prefix) }
 
-func Test_mux_OpenError(t *testing.T) {
+func Test_storeService_OpenError(t *testing.T) {
 	co := &mockConnOpener{
 		OpenConnFunc: func(dsn string) (driver.Conn, error) { return nil, testutil.ErrSample },
 	}
-	m := &kvMux{co: co}
+	m := &storeService{co: co}
 	mux := http.NewServeMux()
 	m.Register(WithServeMux(mux))
 
@@ -61,7 +61,7 @@ func Test_mux_OpenError(t *testing.T) {
 	}
 }
 
-func Test_mux_handlers(t *testing.T) {
+func Test_storeService_handlers(t *testing.T) {
 	type args struct {
 		method string
 		url    string
@@ -205,7 +205,7 @@ func Test_mux_handlers(t *testing.T) {
 					return tt.args.cache, nil
 				},
 			}
-			m := &kvMux{co: co}
+			m := &storeService{co: co}
 			mux := http.NewServeMux()
 			m.Register(WithServeMux(mux))
 
