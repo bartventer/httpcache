@@ -1,6 +1,9 @@
 package fscache
 
 import (
+	"bytes"
+	"context"
+	"io"
 	"io/fs"
 	"net/url"
 	"testing"
@@ -25,7 +28,7 @@ func makeRoot(t testing.TB) *url.URL {
 func TestFSCache_Acceptance(t *testing.T) {
 	acceptance.Run(t, acceptance.FactoryFunc(func() (driver.Conn, func()) {
 		u := makeRoot(t)
-		cache, err := Open(u)
+		cache, err := fromURL(u)
 		testutil.RequireNoError(t, err, "Failed to create fscache")
 		cleanup := func() { cache.Close() }
 		return cache, cleanup
@@ -34,7 +37,7 @@ func TestFSCache_Acceptance(t *testing.T) {
 
 func Test_fsCache_SetError(t *testing.T) {
 	u := makeRoot(t)
-	cache, err := Open(u)
+	cache, err := fromURL(u)
 	testutil.RequireNoError(t, err, "Failed to create fscache")
 	t.Cleanup(func() { cache.Close() })
 
@@ -47,7 +50,7 @@ func Test_fsCache_SetError(t *testing.T) {
 
 func Test_fsCache_KeysError(t *testing.T) {
 	u := makeRoot(t)
-	cache, err := Open(u)
+	cache, err := fromURL(u)
 	testutil.RequireNoError(t, err, "Failed to create fscache")
 	t.Cleanup(func() { cache.Close() })
 
@@ -130,6 +133,54 @@ func TestOpen(t *testing.T) {
 				testutil.AssertNil(tt, got)
 			},
 		},
+		{
+			name: "Encryption Enabled with Key",
+			args: args{
+				dsn: "fscache://?appname=myapp&encrypt=aesgcm&encrypt_key=" + mustBase64Key(
+					t,
+					16,
+				),
+			},
+			assertion: func(tt *testing.T, got *fsCache, err error) {
+				testutil.RequireNoError(tt, err)
+				testutil.RequireNotNil(tt, got)
+				testutil.AssertNotNil(tt, got.enc, "Expected encryptor to be initialized")
+			},
+		},
+		{
+			name: "Encryption Enabled with Key (Environment Variable)",
+			args: args{
+				dsn: "fscache://?appname=myapp&encrypt=aesgcm",
+			},
+			setup: func(tt *testing.T) {
+				tt.Setenv("FSCACHE_ENCRYPT_KEY", "6S-Ks2YYOW0xMvTzKSv6QD30gZeOi1c6Ydr-As5csWk=")
+			},
+			assertion: func(tt *testing.T, got *fsCache, err error) {
+				testutil.RequireNoError(tt, err)
+				testutil.RequireNotNil(tt, got)
+				testutil.AssertNotNil(tt, got.enc, "Expected encryptor to be initialized")
+			},
+		},
+		{
+			name: "Encryption Enabled without Key",
+			args: args{
+				dsn: "fscache://?appname=myapp&encrypt=aesgcm",
+			},
+			assertion: func(tt *testing.T, got *fsCache, err error) {
+				testutil.RequireErrorIs(tt, err, errEncryptionEnabledWithoutKey)
+				testutil.AssertNil(tt, got)
+			},
+		},
+		{
+			name: "Connect Timeout",
+			args: args{
+				dsn: "fscache://?appname=myapp&connect_timeout=1ns&timeout=10s",
+			},
+			assertion: func(tt *testing.T, got *fsCache, err error) {
+				testutil.RequireErrorIs(tt, err, context.DeadlineExceeded)
+				testutil.AssertNil(tt, got)
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -140,7 +191,7 @@ func TestOpen(t *testing.T) {
 			if tt.setup != nil {
 				tt.setup(t)
 			}
-			got, err := Open(u)
+			got, err := fromURL(u)
 			tt.assertion(t, got, err)
 		})
 	}
@@ -152,10 +203,10 @@ func Test_parseTimeout(t *testing.T) {
 		v    string
 		want time.Duration
 	}{
-		{"empty", "", defaultTimeout},
+		{"empty", "", 0},
 		{"valid", "5s", 5 * time.Second},
-		{"invalid", "invalid", defaultTimeout},
-		{"negative", "-1s", defaultTimeout},
+		{"invalid", "invalid", 0},
+		{"negative", "-1s", 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -163,4 +214,36 @@ func Test_parseTimeout(t *testing.T) {
 			testutil.AssertEqual(t, tt.want, got, "parseTimeout(%q)", tt.v)
 		})
 	}
+}
+
+func TestFSCache_SetGet_WithEncryption(t *testing.T) {
+	u, err := url.Parse("fscache://" + t.TempDir() +
+		"?appname=testapp&encrypt=aesgcm&encrypt_key=6S-Ks2YYOW0xMvTzKSv6QD30gZeOi1c6Ydr-As5csWk=")
+	testutil.RequireNoError(t, err)
+	cache, err := fromURL(u)
+	testutil.RequireNoError(t, err)
+	t.Cleanup(func() { cache.Close() })
+
+	plaintext := []byte("super secret value")
+	keyName := "mykey"
+
+	err = cache.Set(keyName, plaintext)
+	testutil.RequireNoError(t, err)
+
+	got, err := cache.Get(keyName)
+	testutil.RequireNoError(t, err)
+	testutil.AssertTrue(t, bytes.Equal(plaintext, got), "decrypted value mismatch")
+
+	// Ensure that the file on disk is not plaintext
+	fname := cache.fn.FileName(keyName)
+	f, err := cache.root.Open(fname)
+	testutil.RequireNoError(t, err)
+	defer f.Close()
+	ciphertext, err := io.ReadAll(f)
+	testutil.RequireNoError(t, err)
+	testutil.AssertTrue(
+		t,
+		!bytes.Contains(ciphertext, plaintext),
+		"ciphertext should not contain plaintext",
+	)
 }
