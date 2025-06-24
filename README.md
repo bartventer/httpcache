@@ -11,8 +11,8 @@
 
 ## Features
 
-- **Plug-and-Play**: Just swap in as your HTTP client's transport; no extra configuration needed.[^1]
-- **RFC 9111 Compliance**: Handles validation, expiration, and revalidation ([view full compliance details](#rfc-9111-compliance-matrix)).
+- **Plug-and-Play**: Just swap in as your HTTP client's transport; no extra configuration needed. [^1]
+- **RFC 9111 Compliance**: Handles validation, expiration, and revalidation ([see details](#rfc-9111-compliance-matrix)).
 - **Cache Control**: Supports all required HTTP cache control directives, as well as extensions like `stale-while-revalidate`, `stale-if-error`, and `immutable` ([view details](#field-definitions-details)).
 - **Cache Backends**: Built-in support for file system and memory caches, with the ability to implement custom backends (see [Cache Backends](#cache-backends)).
 - **Cache Maintenance API**: Optional REST endpoints for listing, retrieving, and deleting cache entries (see [Cache Maintenance API](#cache-maintenance-api-debug-only)).
