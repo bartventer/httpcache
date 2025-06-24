@@ -19,7 +19,7 @@ const Scheme = "memcache"
 //nolint:gochecknoinits // We use init to register the driver.
 func init() {
 	store.Register(Scheme, driver.DriverFunc(func(u *url.URL) (driver.Conn, error) {
-		return Open(u), nil
+		return Open(), nil
 	}))
 }
 
@@ -31,7 +31,7 @@ type memCache struct {
 // Open creates a new in-memory cache.
 //
 // This cache is not persistent and will lose all data when the process exits.
-func Open(_ *url.URL) *memCache {
+func Open() *memCache {
 	return &memCache{
 		store: make(map[string][]byte),
 	}

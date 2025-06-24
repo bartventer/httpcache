@@ -4,7 +4,6 @@
 package memcache
 
 import (
-	"net/url"
 	"testing"
 
 	"github.com/bartventer/httpcache/store/acceptance"
@@ -13,8 +12,7 @@ import (
 
 func BenchmarkMemCache(b *testing.B) {
 	acceptance.RunB(b, acceptance.FactoryFunc(func() (driver.Conn, func()) {
-		u := &url.URL{Scheme: Scheme}
-		cache := Open(u)
+		cache := Open()
 		return cache, func() {}
 	}))
 }
