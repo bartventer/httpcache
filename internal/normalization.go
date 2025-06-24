@@ -188,12 +188,16 @@ func normalizeOrderInsensitiveWithQValues(value string) string {
 		continue
 	}
 
-	// Sort: descending q, then fewer wildcards, then lexicographically
+	// Sort by quality value, then by number of wildcards in main,
+	// then lexicographically by main, then by number of parameters,
+	// then lexicographically by parameters.
 	slices.SortFunc(qualityParts, func(a, b qualityValue) int {
 		return cmp.Or(
 			cmp.Compare(b.q.Value(), a.q.Value()),
 			cmp.Compare(strings.Count(a.main, "*"), strings.Count(b.main, "*")),
 			cmp.Compare(a.main, b.main),
+			cmp.Compare(len(b.params), len(a.params)),
+			slices.Compare(a.params, b.params),
 		)
 	})
 

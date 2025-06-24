@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/bartventer/httpcache/store"
+	"github.com/bartventer/httpcache/store/driver"
 )
 
-type Cache = store.Cache
+type Cache = driver.Conn
 
 // ResponseCache is an interface for caching HTTP responses.
 // It provides methods to delete any cached item by its key,
@@ -19,7 +19,7 @@ type ResponseCache interface {
 	Set(key string, entry *Response) error
 	Delete(key string) error
 	GetRefs(key string) (ResponseRefs, error)
-	SetRefs(key string, entry ResponseRefs) error
+	SetRefs(key string, refs ResponseRefs) error
 }
 
 type responseCache struct {
@@ -68,8 +68,8 @@ func (r *responseCache) GetRefs(urlKey string) (ResponseRefs, error) {
 	return refs, nil
 }
 
-func (r *responseCache) SetRefs(urlKey string, headers ResponseRefs) error {
-	data, err := json.Marshal(headers)
+func (r *responseCache) SetRefs(urlKey string, refs ResponseRefs) error {
+	data, err := json.Marshal(refs)
 	if err != nil {
 		return fmt.Errorf("failed to marshal headers: %w", err)
 	}

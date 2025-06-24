@@ -6,14 +6,14 @@ package fscache
 import (
 	"testing"
 
-	"github.com/bartventer/httpcache/store"
 	"github.com/bartventer/httpcache/store/acceptance"
+	"github.com/bartventer/httpcache/store/driver"
 )
 
 func BenchmarkFSCache(b *testing.B) {
-	acceptance.RunB(b, acceptance.FactoryFunc(func() (store.Cache, func()) {
+	acceptance.RunB(b, acceptance.FactoryFunc(func() (driver.Conn, func()) {
 		u := makeRoot(b)
-		cache, err := Open(u)
+		cache, err := fromURL(u)
 		if err != nil {
 			b.Fatalf("Failed to create fscache: %v", err)
 		}

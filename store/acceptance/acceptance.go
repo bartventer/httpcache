@@ -1,21 +1,23 @@
-// Package acceptancetest provides a suite of acceptance tests for Cache implementations.
+// Package acceptance provides a suite of acceptance tests for Cache implementations.
 package acceptance
 
 import (
 	"bytes"
+	"slices"
 	"testing"
 
 	"github.com/bartventer/httpcache/internal/testutil"
-	"github.com/bartventer/httpcache/store"
+	"github.com/bartventer/httpcache/store/driver"
+	"github.com/bartventer/httpcache/store/expapi"
 )
 
 type Factory interface {
-	Make() (cache store.Cache, cleanup func())
+	Make() (cache driver.Conn, cleanup func())
 }
 
-type FactoryFunc func() (store.Cache, func())
+type FactoryFunc func() (driver.Conn, func())
 
-func (f FactoryFunc) Make() (store.Cache, func()) { return f() }
+func (f FactoryFunc) Make() (driver.Conn, func()) { return f() }
 
 // Run runs a standard suite of tests against the provided Cache implementation.
 // The factory function must return a new, empty Cache for each test.
@@ -26,6 +28,7 @@ func Run(t *testing.T, factory Factory) {
 	t.Run("Delete", func(t *testing.T) { testDelete(t, factory.Make) })
 	t.Run("GetNonexistent", func(t *testing.T) { testGetNonexistent(t, factory.Make) })
 	t.Run("DeleteNonexistent", func(t *testing.T) { testDeleteNonexistent(t, factory.Make) })
+	t.Run("Keys", func(t *testing.T) { testKeys(t, factory.Make) })
 }
 
 func testSetAndGet(t *testing.T, factory FactoryFunc) {
@@ -70,7 +73,7 @@ func testDelete(t *testing.T, factory FactoryFunc) {
 	testutil.RequireErrorIs(
 		t,
 		err,
-		store.ErrNotExist,
+		driver.ErrNotExist,
 		"Get after delete did not return ErrNotExist",
 	)
 }
@@ -83,7 +86,7 @@ func testGetNonexistent(t *testing.T, factory FactoryFunc) {
 	testutil.RequireErrorIs(
 		t,
 		err,
-		store.ErrNotExist,
+		driver.ErrNotExist,
 		"Get non-existent key did not return ErrNotExist",
 	)
 }
@@ -96,7 +99,31 @@ func testDeleteNonexistent(t *testing.T, factory FactoryFunc) {
 	testutil.RequireErrorIs(
 		t,
 		err,
-		store.ErrNotExist,
+		driver.ErrNotExist,
 		"Delete non-existent key did not return ErrNotExist",
+	)
+}
+
+func testKeys(t *testing.T, factory FactoryFunc) {
+	cache, cleanup := factory.Make()
+	t.Cleanup(cleanup)
+
+	kl, ok := cache.(expapi.KeyLister)
+	if !ok {
+		t.Skip("Cache implementation does not support key listing")
+	}
+	keys := []string{"foo", "bar", "baz"}
+	for _, key := range keys {
+		value := []byte("value for " + key)
+		testutil.RequireNoError(t, cache.Set(key, value), "Set failed for key "+key)
+	}
+	gotKeys, err := kl.Keys("")
+	testutil.RequireNoError(t, err, "Keys retrieval failed")
+	slices.Sort(gotKeys)
+	slices.Sort(keys)
+	testutil.AssertTrue(
+		t,
+		slices.Equal(gotKeys, keys),
+		"Keys did not match expected keys",
 	)
 }

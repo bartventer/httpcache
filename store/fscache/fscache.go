@@ -1,35 +1,63 @@
-// Package fscache implements a file system-based store.Cache.
+// Package fscache implements a file system-based cache backend.
 //
-// Entries are stored as files in a directory under the user's OS cache directory by default.
-// The cache location is configured via URL; see [Open] for details.
+// Entries are stored as files in a directory under the user's OS cache
+// directory by default. The cache location and behavior are configured via DSN
+// query parameters.
 //
-// Users should call [fsCache.Close] on the cache when done to release resources promptly.
+// Supported DSN query parameters:
+//   - appname (required): Subdirectory name for cache isolation.
+//   - timeout (optional): Operation timeout (e.g., "2s", "500ms"). Default: 5m.
+//   - connect_timeout (optional): Timeout for establishing the cache
+//     connection (e.g., "2s"). Default: 5m.
+//   - encrypt (optional): Enable encryption for cache entries. Set to "on" or
+//     "aesgcm".
+//   - encrypt_key (optional): The AES key, base64-encoded (URL-safe variant
+//     with/without padding as per RFC 4648 §5). Must decode to the correct
+//     length as required by [crypto/aes].
+//
+// Example DSNs:
+//
+//	fscache://?appname=myapp
+//	fscache:///tmp/cache?appname=myapp&timeout=2s
+//	fscache:///tmp/cache?appname=myapp&connect_timeout=2s&timeout=1m
+//	fscache://?appname=myapp&encrypt=on&encrypt_key=6S-Ks2YYOW0xMvTzKSv6QD30gZeOi1c6Ydr-As5csWk=
+//
+// Example environment variable:
+//
+//	export FSCACHE_ENCRYPT_KEY="6S-Ks2YYOW0xMvTzKSv6QD30gZeOi1c6Ydr-As5csWk="
+//
+// To generate a suitable encryption key (32 bytes, URL-safe, with padding):
+//
+//	openssl rand 32 | base64 | tr '+/' '-_' | tr -d '\n'
 package fscache
 
 import (
+	"cmp"
+	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/bartventer/httpcache/store"
+	"github.com/bartventer/httpcache/store/driver"
+	"github.com/bartventer/httpcache/store/expapi"
 )
 
 const Scheme = "fscache" // url scheme for the file system cache
 
 //nolint:gochecknoinits // We use init to register the driver.
 func init() {
-	store.Register(Scheme, store.DriverFunc(func(u *url.URL) (store.Cache, error) {
-		return Open(u)
+	store.Register(Scheme, driver.DriverFunc(func(u *url.URL) (driver.Conn, error) {
+		return fromURL(u)
 	}))
-}
-
-type fsCache struct {
-	root *os.Root
-	fn   fileNamer // generates file names from keys, useful for testing purposes
 }
 
 var (
@@ -38,105 +66,377 @@ var (
 	ErrCreateCacheDir = errors.New("fscache: could not create cache dir")
 )
 
-// Open creates a new file system cache from the provided URL.
-//
-// The URL path sets the base directory (defaults to the user's OS cache dir if empty).
-// The "appname" query parameter is required and specifies a subdirectory.
-//
-// Examples:
-//
-//	fscache://?appname=myapp           → <user cache dir>/myapp
-//	fscache:///tmp/cache?appname=myapp → /tmp/cache/myapp
-func Open(u *url.URL) (*fsCache, error) {
-	var base string
-	if u.Path != "" && u.Path != "/" {
-		base = u.Path
-	} else {
-		userCacheDir, err := os.UserCacheDir()
-		if err != nil {
-			return nil, errors.Join(ErrUserCacheDir, err)
-		}
-		base = userCacheDir
-	}
+type Error struct {
+	Op  string // operation being performed (e.g., "Get", "Set")
+	Key string // optional key for which the operation failed
+	Err error  // underlying error
+}
 
-	appname := u.Query().Get("appname")
-	if appname == "" {
+func (e *Error) Error() string {
+	if e.Key != "" {
+		return fmt.Sprintf("fscache: %s for key %q: %v", e.Op, e.Key, e.Err)
+	}
+	return fmt.Sprintf("fscache: %s: %v", e.Op, e.Err)
+}
+
+func (e *Error) Unwrap() error {
+	return e.Err
+}
+
+type fsCache struct {
+	// configurable options
+
+	root        *os.Root
+	base        string        // base directory for the cache (parent of root)
+	connTimeout time.Duration // optional timeout for establishing the connection
+	timeout     time.Duration // optional timeout for operations
+	enc         encryptor     // optional encryptor for data
+
+	// internal components
+
+	fn  fileNamer     // generates file names from keys
+	fnk fileNameKeyer // extracts keys from file names
+	dw  dirWalker     // used for directory walking
+}
+
+const defaultTimeout = 5 * time.Minute
+
+func parseTimeout(v string) time.Duration {
+	if v == "" {
+		return 0
+	}
+	timeout, err := time.ParseDuration(v)
+	if err != nil {
+		return 0
+	}
+	return max(timeout, 0)
+}
+
+var errEncryptionEnabledWithoutKey = errors.New("fscache: encryption enabled but no key provided")
+
+type Option interface {
+	apply(*fsCache) error
+}
+
+type optionFunc func(*fsCache) error
+
+func (f optionFunc) apply(c *fsCache) error {
+	return f(c)
+}
+
+// WithConnectTimeout sets the timeout for establishing the cache connection; default: 5 minutes.
+func WithConnectTimeout(timeout time.Duration) Option {
+	return optionFunc(func(c *fsCache) error {
+		c.connTimeout = max(timeout, 0)
+		return nil
+	})
+}
+
+// WithTimeout sets the timeout for cache operations; default: 5 minutes.
+func WithTimeout(timeout time.Duration) Option {
+	return optionFunc(func(c *fsCache) error {
+		c.timeout = max(timeout, 0)
+		return nil
+	})
+}
+
+// WithEncryption enables encryption for cache entries using AES-GCM.
+func WithEncryption(key string) Option {
+	return optionFunc(func(c *fsCache) (err error) {
+		if key == "" {
+			return errEncryptionEnabledWithoutKey
+		}
+		c.enc, err = newAESGCMEncryptor(rand.Reader, key)
+		return err
+	})
+}
+
+// WithBaseDir sets the base directory for the cache; default: user's OS cache directory.
+func WithBaseDir(base string) Option {
+	return optionFunc(func(c *fsCache) error {
+		c.base = base
+		return nil
+	})
+}
+
+func fromURL(u *url.URL) (*fsCache, error) {
+	opts := make([]Option, 0, 4)
+	var appname string
+	if appname = u.Query().Get("appname"); appname == "" {
 		return nil, ErrMissingAppName
 	}
-	base = filepath.Join(base, appname)
-	if err := os.MkdirAll(base, 0o755); err != nil {
-		return nil, errors.Join(ErrCreateCacheDir, err)
+	if u.Path != "" && u.Path != "/" {
+		opts = append(opts, WithBaseDir(u.Path))
 	}
-	root, err := os.OpenRoot(base)
+	if v := u.Query().Get("connect_timeout"); v != "" {
+		opts = append(opts, WithConnectTimeout(parseTimeout(v)))
+	}
+	if v := u.Query().Get("timeout"); v != "" {
+		opts = append(opts, WithTimeout(parseTimeout(v)))
+	}
+	if encrypt := u.Query().Get("encrypt"); encrypt == "on" || encrypt == "aesgcm" {
+		key := cmp.Or(u.Query().Get("encrypt_key"), os.Getenv("FSCACHE_ENCRYPT_KEY"))
+		opts = append(opts, WithEncryption(key))
+	}
+	return Open(appname, opts...)
+}
+
+// Open creates a new file system cache with the specified application name and options.
+//
+// See the package documentation for supported options and examples.
+func Open(appname string, opts ...Option) (*fsCache, error) {
+	c := new(fsCache)
+	for _, opt := range opts {
+		if err := opt.apply(c); err != nil {
+			return nil, err
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), cmp.Or(c.connTimeout, defaultTimeout))
+	defer cancel()
+	errc := make(chan error, 1)
+	go func() {
+		defer close(errc)
+		if err := c.initialize(appname); err != nil {
+			errc <- err
+			return
+		}
+		errc <- nil
+	}()
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case err := <-errc:
+		if err != nil {
+			return nil, err
+		}
+		return c, nil
+	}
+}
+
+func (c *fsCache) initialize(appname string) error {
+	if c.base == "" {
+		userCacheDir, err := os.UserCacheDir()
+		if err != nil {
+			return errors.Join(ErrUserCacheDir, err)
+		}
+		c.base = userCacheDir
+	}
+	if appname == "" {
+		return ErrMissingAppName
+	}
+	c.base = filepath.Join(c.base, appname)
+	if err := os.MkdirAll(c.base, 0o755); err != nil {
+		return errors.Join(ErrCreateCacheDir, err)
+	}
+	var err error
+	c.root, err = os.OpenRoot(c.base)
 	if err != nil {
-		return nil, fmt.Errorf("fscache: could not open cache directory %q: %w", base, err)
+		return fmt.Errorf("fscache: could not open cache directory %q: %w", c.base, err)
 	}
-	return &fsCache{
-		root: root,
-		fn:   fileNamerFunc(safeFileName),
-	}, nil
+	c.fn = fileNamerFunc(safeFileName)
+	c.fnk = fileNameKeyerFunc(keyFromFileName)
+	c.dw = dirWalkerFunc(filepath.WalkDir)
+	c.timeout = cmp.Or(c.timeout, defaultTimeout)
+
+	return nil
 }
 
-func safeFileName(key string) string {
-	return strings.ReplaceAll(key, string(os.PathSeparator), "_")
+type (
+	fileNamer     interface{ FileName(key string) string }
+	fileNameKeyer interface{ KeyFromFileName(name string) string }
+	dirWalker     interface {
+		WalkDir(root string, fn fs.WalkDirFunc) error
+	}
+)
+
+type (
+	fileNamerFunc     func(key string) string
+	fileNameKeyerFunc func(name string) string
+	dirWalkerFunc     func(root string, fn fs.WalkDirFunc) error
+)
+
+func (f fileNamerFunc) FileName(key string) string                   { return f(key) }
+func (f fileNameKeyerFunc) KeyFromFileName(name string) string       { return f(name) }
+func (f dirWalkerFunc) WalkDir(root string, fn fs.WalkDirFunc) error { return f(root, fn) }
+
+func safeFileName(key string) string { return base64.RawURLEncoding.EncodeToString([]byte(key)) }
+
+func keyFromFileName(name string) string {
+	data, _ := base64.RawURLEncoding.DecodeString(name)
+	return string(data)
 }
 
-type fileNamer interface {
-	FileName(key string) string
-}
-
-type fileNamerFunc func(key string) string
-
-func (f fileNamerFunc) FileName(key string) string {
-	return f(key)
-}
-
-var _ store.Cache = (*fsCache)(nil)
+var _ driver.Conn = (*fsCache)(nil)
+var _ expapi.KeyLister = (*fsCache)(nil)
 
 func (c *fsCache) Get(key string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), c.timeout)
+	defer cancel()
+
+	type result struct {
+		data []byte
+		err  error
+	}
+	errc := make(chan result, 1)
+	go func() {
+		defer close(errc)
+		data, err := c.get(key)
+		if err != nil {
+			errc <- result{nil, &Error{"Get", key, err}}
+			return
+		}
+		errc <- result{data, nil}
+	}()
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case res := <-errc:
+		return res.data, res.err
+	}
+}
+
+func (c *fsCache) get(key string) ([]byte, error) {
 	f, err := c.root.Open(c.fn.FileName(key))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			err = errors.Join(
-				store.ErrNotExist,
-				fmt.Errorf("fscache: entry for key %q does not exist: %w", key, err),
-			)
+			return nil, errors.Join(driver.ErrNotExist, err)
 		}
 		return nil, err
 	}
 	defer f.Close()
-	return io.ReadAll(f)
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return nil, err
+	}
+	if c.enc != nil {
+		data, err = c.enc.Decrypt(data)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return data, nil
 }
 
 func (c *fsCache) Set(key string, entry []byte) error {
+	ctx, cancel := context.WithTimeout(context.Background(), c.timeout)
+	defer cancel()
+
+	errc := make(chan error, 1)
+	go func() {
+		defer close(errc)
+		err := c.set(key, entry)
+		if err != nil {
+			errc <- &Error{"Set", key, err}
+			return
+		}
+		errc <- nil
+	}()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-errc:
+		return err
+	}
+}
+
+func (c *fsCache) set(key string, entry []byte) error {
+	if c.enc != nil {
+		var err error
+		entry, err = c.enc.Encrypt(entry)
+		if err != nil {
+			return err
+		}
+	}
 	f, err := c.root.Create(c.fn.FileName(key))
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 	_, err = f.Write(entry)
-	return err
+	if err != nil {
+		return err
+	}
+	return f.Sync()
 }
 
 func (c *fsCache) Delete(key string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), c.timeout)
+	defer cancel()
+
+	errc := make(chan error, 1)
+	go func() {
+		defer close(errc)
+		err := c.delete(key)
+		if err != nil {
+			errc <- &Error{"Delete", key, err}
+			return
+		}
+		errc <- nil
+	}()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-errc:
+		return err
+	}
+}
+
+func (c *fsCache) delete(key string) error {
 	err := c.root.Remove(c.fn.FileName(key))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			err = errors.Join(
-				store.ErrNotExist,
-				fmt.Errorf("fscache: entry for key %q does not exist: %w", key, err),
-			)
+			err = errors.Join(driver.ErrNotExist, err)
 		}
 		return err
 	}
 	return nil
 }
 
-// Close releases resources held by the cache.
-//
-// Users should always call Close when finished with the cache to promptly release
-// OS resources. If Close is not called, resources will eventually be released by
-// a finalizer, but this may happen much later.
-func (c *fsCache) Close() error {
-	return c.root.Close()
+func (c *fsCache) Keys(prefix string) ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), c.timeout)
+	defer cancel()
+
+	type result struct {
+		keys []string
+		err  error
+	}
+	errc := make(chan result, 1)
+	go func() {
+		defer close(errc)
+		keys, err := c.keys(prefix)
+		if err != nil {
+			errc <- result{nil, &Error{Op: "Keys", Err: fmt.Errorf("prefix %q: %w", prefix, err)}}
+			return
+		}
+		errc <- result{keys, nil}
+	}()
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case res := <-errc:
+		return res.keys, res.err
+	}
+}
+
+func (c *fsCache) keys(prefix string) ([]string, error) {
+	dirname := c.root.Name()
+	keys := make([]string, 0, 10)
+	err := c.dw.WalkDir(dirname, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if key := c.fnk.KeyFromFileName(filepath.Base(path)); strings.HasPrefix(key, prefix) {
+			keys = append(keys, key)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return keys, nil
 }
