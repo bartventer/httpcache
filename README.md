@@ -67,10 +67,12 @@ func main() {
 
 ## Cache Backends
 
-| Backend                                                                         | DSN Example                | Description                                          |
-| ------------------------------------------------------------------------------- | -------------------------- | ---------------------------------------------------- |
-| [`fscache`](https://pkg.go.dev/github.com/bartventer/httpcache/store/fscache)   | `fscache://?appname=myapp` | Built-in file system cache, stores responses on disk |
-| [`memcache`](https://pkg.go.dev/github.com/bartventer/httpcache/store/memcache) | `memcache://`              | Built-in memory cache, stores responses in memory    |
+The following built-in cache backends are available:
+
+| Backend                                                                         | DSN Example                | Description                                                                                                                                                            |
+| ------------------------------------------------------------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`fscache`](https://pkg.go.dev/github.com/bartventer/httpcache/store/fscache)   | `fscache://?appname=myapp` | File system cache, stores responses on disk. Suitable for persistent caching across restarts. Supports context cancellation, as well as optional `AES-GCM` encryption. |
+| [`memcache`](https://pkg.go.dev/github.com/bartventer/httpcache/store/memcache) | `memcache://`              | In-memory cache, suitable for ephemeral caching. Does not persist across restarts.                                                                                     |
 
 Consult the documentation for each backend for specific configuration options and usage details.
 
