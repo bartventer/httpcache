@@ -108,11 +108,11 @@ To use a custom [ServeMux](https://pkg.go.dev/net/http#ServeMux), pass `expapi.W
 
 ## Options
 
-| Option                            | Description                                        | Default Value                   |
-| --------------------------------- | -------------------------------------------------- | ------------------------------- |
-| `WithUpstream(http.RoundTripper)` | Set the round tripper for upstream/origin requests | `http.DefaultTransport`         |
-| `WithSWRTimeout(time.Duration)`   | Set the stale-while-revalidate timeout             | `5 * time.Second`               |
-| `WithLogger(*slog.Logger)`        | Set a logger for debug output                      | `slog.New(slog.DiscardHandler)` |
+| Option                            | Description                                         | Default Value                   |
+| --------------------------------- | --------------------------------------------------- | ------------------------------- |
+| `WithUpstream(http.RoundTripper)` | Set a custom transport for upstream/origin requests | `http.DefaultTransport`         |
+| `WithSWRTimeout(time.Duration)`   | Set the stale-while-revalidate timeout              | `5 * time.Second`               |
+| `WithLogger(*slog.Logger)`        | Set a logger for debug output                       | `slog.New(slog.DiscardHandler)` |
 
 ## Cache Status Header
 
@@ -308,4 +308,4 @@ This project is licensed under the [Apache License 2.0](https://www.apache.org/l
 
 ## Notes
 
-[^1]: While no configuration is needed, you can customize the underlying transport. `httpcache` wraps your transport (default: `http.DefaultTransport`) to add caching with minimal code changes.
+[^1]: No configuration is needed beyond the cache backend DSN. Caching is handled automatically based on HTTP headers and directives. To use a custom upstream transport, pass it with the `WithUpstream` option. This lets you add `httpcache` to your existing HTTP client with minimal changes. See [Options](#options) for details.
