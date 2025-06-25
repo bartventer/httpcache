@@ -59,8 +59,17 @@ func (f optionFunc) apply(r *roundTripper) {
 	f(r)
 }
 
-// WithTransport sets the underlying HTTP transport for making requests;
-// default: [http.DefaultTransport].
+// WithTransport sets the underlying HTTP transport for making requests.
+// Default: http.DefaultTransport.
+//
+// Note: Any headers added by the provided transport (such as authentication
+// headers) will not affect cache key calculation or Vary header matching (per
+// RFC 9111 §4.1), as the caching layer operates on the original request as
+// received from the client. For example, if you use a transport that adds an
+// "Authorization" header, and the stored response has a Vary header that
+// includes "Authorization", the cache will not consider this header when
+// matching the incoming request to originating requests associated with
+// candidate cached responses.
 func WithTransport(transport http.RoundTripper) Option {
 	return optionFunc(func(r *roundTripper) {
 		r.transport = transport
