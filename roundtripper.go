@@ -50,36 +50,32 @@ import (
 const CacheStatusHeader = internal.CacheStatusHeader
 
 type Option interface {
-	apply(*roundTripper)
+	apply(*transport)
 }
 
-type optionFunc func(*roundTripper)
+type optionFunc func(*transport)
 
-func (f optionFunc) apply(r *roundTripper) {
+func (f optionFunc) apply(r *transport) {
 	f(r)
 }
 
-// WithTransport sets the underlying HTTP transport for making requests.
-// Default: http.DefaultTransport.
+// WithUpstream sets the underlying [http.RoundTripper] used for upstream/origin
+// requests. Default: [http.DefaultTransport].
 //
-// Note: Any headers added by the provided transport (such as authentication
-// headers) will not affect cache key calculation or Vary header matching (per
-// RFC 9111 §4.1), as the caching layer operates on the original request as
-// received from the client. For example, if you use a transport that adds an
-// "Authorization" header, and the stored response has a Vary header that
-// includes "Authorization", the cache will not consider this header when
-// matching the incoming request to originating requests associated with
-// candidate cached responses.
-func WithTransport(transport http.RoundTripper) Option {
-	return optionFunc(func(r *roundTripper) {
-		r.transport = transport
+// Note: Headers added by the upstream roundtripper (e.g., authentication
+// headers) do not affect cache key calculation or Vary header matching
+// (RFC 9111 §4.1). The cache operates on the original client request, not the
+// mutated request seen by the upstream roundtripper.
+func WithUpstream(upstream http.RoundTripper) Option {
+	return optionFunc(func(r *transport) {
+		r.upstream = upstream
 	})
 }
 
 // WithSWRTimeout sets the timeout for Stale-While-Revalidate requests;
 // default: [DefaultSWRTimeout].
 func WithSWRTimeout(timeout time.Duration) Option {
-	return optionFunc(func(r *roundTripper) {
+	return optionFunc(func(r *transport) {
 		r.swrTimeout = timeout
 	})
 }
@@ -87,18 +83,18 @@ func WithSWRTimeout(timeout time.Duration) Option {
 // WithLogger sets the logger for debug output; default:
 // [slog.New]([slog.DiscardHandler]).
 func WithLogger(logger *slog.Logger) Option {
-	return optionFunc(func(r *roundTripper) {
+	return optionFunc(func(r *transport) {
 		r.logger = logger
 	})
 }
 
-// roundTripper is an implementation of [http.RoundTripper] that caches HTTP responses
+// transport is an implementation of [http.RoundTripper] that caches HTTP responses
 // according to the HTTP caching rules defined in RFC 9111.
-type roundTripper struct {
+type transport struct {
 	// Configurable options
 
 	cache      internal.ResponseCache // Cache for storing and retrieving responses
-	transport  http.RoundTripper      // Underlying HTTP transport for making requests
+	upstream   http.RoundTripper      // Underlying round tripper for upstream/origin requests
 	swrTimeout time.Duration          // Timeout for Stale-While-Revalidate requests
 	logger     *slog.Logger           // Logger for debug output, if needed
 
@@ -141,7 +137,7 @@ const DefaultSWRTimeout = 5 * time.Second // Default timeout for Stale-While-Rev
 //	}()
 var ErrOpenCache = errors.New("httpcache: failed to open cache")
 
-// NewTransport returns an http.RoundTripper that caches HTTP responses using
+// NewTransport returns an [http.RoundTripper] that caches HTTP responses using
 // the specified cache backend.
 //
 // The backend is selected via a DSN (e.g., "memcache://", "fscache://"), and
@@ -149,7 +145,7 @@ var ErrOpenCache = errors.New("httpcache: failed to open cache")
 // Panics with [ErrOpenCache] if the cache cannot be opened.
 //
 // To configure the transport, you can use functional options such as
-// [WithTransport], [WithSWRTimeout], and [WithLogger].
+// [WithUpstream], [WithSWRTimeout], and [WithLogger].
 func NewTransport(dsn string, options ...Option) http.RoundTripper {
 	cache, err := store.Open(dsn)
 	if err != nil {
@@ -159,7 +155,7 @@ func NewTransport(dsn string, options ...Option) http.RoundTripper {
 }
 
 func newTransport(conn driver.Conn, options ...Option) http.RoundTripper {
-	rt := &roundTripper{
+	rt := &transport{
 		cache: internal.NewResponseCache(conn),
 		rmc:   internal.NewRequestMethodChecker(),
 		vm:    internal.NewVaryMatcher(internal.NewHeaderValueNormalizer()),
@@ -180,15 +176,15 @@ func newTransport(conn driver.Conn, options ...Option) http.RoundTripper {
 	for _, opt := range options {
 		opt.apply(rt)
 	}
-	rt.transport = cmp.Or(rt.transport, http.DefaultTransport)
+	rt.upstream = cmp.Or(rt.upstream, http.DefaultTransport)
 	rt.swrTimeout = cmp.Or(max(rt.swrTimeout, 0), DefaultSWRTimeout)
 	rt.logger = cmp.Or(rt.logger, slog.New(slog.DiscardHandler))
 	return rt
 }
 
-var _ http.RoundTripper = (*roundTripper)(nil)
+var _ http.RoundTripper = (*transport)(nil)
 
-func (r *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+func (r *transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	urlKey := r.uk.URLKey(req.URL)
 
 	if !r.rmc.IsRequestMethodUnderstood(req) {
@@ -223,19 +219,19 @@ func (r *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	return r.handleCacheHit(req, entry, urlKey, refs, refIndex)
 }
 
-func (r *roundTripper) handleUnrecognizedMethod(
+func (r *transport) handleUnrecognizedMethod(
 	req *http.Request,
 	urlKey string,
 ) (*http.Response, error) {
 	if !internal.IsUnsafeMethod(req) {
-		resp, err := r.transport.RoundTrip(req)
+		resp, err := r.upstream.RoundTrip(req)
 		if err != nil {
 			return nil, err
 		}
 		internal.CacheStatusBypass.ApplyTo(resp.Header)
 		return resp, nil
 	}
-	resp, err := r.transport.RoundTrip(req)
+	resp, err := r.upstream.RoundTrip(req)
 	if err != nil {
 		return nil, err
 	}
@@ -247,7 +243,7 @@ func (r *roundTripper) handleUnrecognizedMethod(
 	return resp, nil
 }
 
-func (r *roundTripper) handleCacheMiss(
+func (r *transport) handleCacheMiss(
 	req *http.Request,
 	urlKey string,
 	refs internal.ResponseRefs,
@@ -269,7 +265,7 @@ func (r *roundTripper) handleCacheMiss(
 	return resp, nil
 }
 
-func (r *roundTripper) handleCacheHit(
+func (r *transport) handleCacheHit(
 	req *http.Request,
 	stored *internal.Response,
 	urlKey string,
@@ -324,7 +320,7 @@ revalidate:
 	return r.vrh.HandleValidationResponse(ctx, req, resp, err)
 }
 
-func (r *roundTripper) serveFromCache(
+func (r *transport) serveFromCache(
 	stored *internal.Response,
 	freshness *internal.Freshness,
 	noCacheQualified bool,
@@ -341,7 +337,7 @@ func (r *roundTripper) serveFromCache(
 	return stored.Data, nil
 }
 
-func (r *roundTripper) handleStaleWhileRevalidate(
+func (r *transport) handleStaleWhileRevalidate(
 	req *http.Request,
 	stored *internal.Response,
 	urlKey string,
@@ -355,7 +351,7 @@ func (r *roundTripper) handleStaleWhileRevalidate(
 	return stored.Data, nil
 }
 
-func (r *roundTripper) performBackgroundRevalidation(
+func (r *transport) performBackgroundRevalidation(
 	req *http.Request,
 	stored *internal.Response,
 	urlKey string,
@@ -411,11 +407,11 @@ func (r *roundTripper) performBackgroundRevalidation(
 	}
 }
 
-func (r *roundTripper) roundTripTimed(
+func (r *transport) roundTripTimed(
 	req *http.Request,
 ) (resp *http.Response, start, end time.Time, err error) {
 	start = r.clock.Now()
-	resp, err = r.transport.RoundTrip(req)
+	resp, err = r.upstream.RoundTrip(req)
 	end = r.clock.Now()
 	if resp != nil {
 		_ = internal.FixDateHeader(resp.Header, end)
