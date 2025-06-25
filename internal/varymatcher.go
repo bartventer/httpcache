@@ -59,18 +59,19 @@ func (vm *varyMatcher) VaryHeadersMatch(entries ResponseRefs, reqHdr http.Header
 	return -1, false // No match found
 }
 
-func (vm *varyMatcher) varyHeadersMatchOne(entry *ResponseRef, reqHdr http.Header) bool {
+func (vm *varyMatcher) varyHeadersMatchOne(entry *ResponseRef, reqHeader http.Header) bool {
 	if entry.Vary == "*" {
 		return false // Vary: "*" never matches
 	}
 	for field, value := range entry.VaryResolved {
-		reqValue := reqHdr[field] // field is already canonicalized
-		if len(reqValue) == 0 {
-			return false
+		reqValues := reqHeader[field]
+		// an empty value is comparable and means "no variation"
+		reqValue := ""
+		if len(reqValues) > 0 {
+			// NOTE: The policy of this cache is to use just the first header line
+			reqValue = vm.hvn.NormalizeHeaderValue(field, reqValues[0])
 		}
-		// NOTE: The policy of this cache is to use just the first header line
-		normalizedValue := vm.hvn.NormalizeHeaderValue(field, reqValue[0])
-		if normalizedValue != value {
+		if reqValue != value {
 			return false
 		}
 	}

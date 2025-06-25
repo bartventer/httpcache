@@ -97,7 +97,7 @@ func ParseResponse(data []byte, req *http.Request) (resp *Response, err error) {
 type ResponseRef struct {
 	ResponseID   string            `json:"id"`                   // unique identifier for the response entry.
 	Vary         string            `json:"vary"`                 // value of the Vary response header.
-	VaryResolved map[string]string `json:"vary_resolved"`        // resolved varying request headers.
+	VaryResolved map[string]string `json:"vary_resolved"`        // resolved varying request headers, keys are canonicalized.
 	ReceivedAt   time.Time         `json:"received_at,omitzero"` // when the response was generated.
 }
 
