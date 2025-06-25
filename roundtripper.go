@@ -231,8 +231,8 @@ func (r *roundTripper) handleUnrecognizedMethod(
 		return nil, err
 	}
 	if internal.IsNonErrorStatus(resp.StatusCode) {
-		headers, _ := r.cache.GetRefs(urlKey)
-		r.ci.InvalidateCache(req.URL, resp.Header, headers, urlKey)
+		refs, _ := r.cache.GetRefs(urlKey)
+		r.ci.InvalidateCache(req.URL, resp.Header, refs, urlKey)
 	}
 	internal.CacheStatusBypass.ApplyTo(resp.Header)
 	return resp, nil
