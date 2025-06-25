@@ -46,46 +46,6 @@ func (r RawDeltaSeconds) Value() (dur time.Duration, valid bool) {
 	return time.Duration(seconds) * time.Second, true
 }
 
-// TrimmedCSVSeq returns an iterator over the raw comma-separated string.
-// It yields each part of the string, trimmed of whitespace, and does not split inside quoted strings.
-func TrimmedCSVSeq(s string) iter.Seq[string] {
-	return func(yield func(string) bool) {
-		var part strings.Builder
-		inQuotes := false
-		escape := false
-		for i := range len(s) {
-			c := s[i]
-			switch {
-			case escape:
-				part.WriteByte(c)
-				escape = false
-			case c == '\\':
-				part.WriteByte(c)
-				escape = true
-			case c == '"':
-				part.WriteByte(c)
-				inQuotes = !inQuotes
-			case c == ',' && !inQuotes:
-				p := textproto.TrimString(part.String())
-				if len(p) > 0 {
-					if !yield(p) {
-						return
-					}
-				}
-				part.Reset()
-			default:
-				part.WriteByte(c)
-			}
-		}
-		if part.Len() > 0 {
-			p := textproto.TrimString(part.String())
-			if len(p) > 0 {
-				_ = yield(p)
-			}
-		}
-	}
-}
-
 // RawCSVSeq is a string that represents a sequence of comma-separated values.
 type RawCSVSeq string
 

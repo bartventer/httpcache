@@ -15,6 +15,7 @@ import (
 // be appended.
 type ResponseStorer interface {
 	StoreResponse(
+		req *http.Request,
 		resp *http.Response,
 		urlKey string,
 		refs ResponseRefs,
@@ -34,6 +35,7 @@ func NewResponseStorer(cache ResponseCache, vhn VaryHeaderNormalizer, vk VaryKey
 }
 
 func (r *responseStorer) StoreResponse(
+	req *http.Request,
 	resp *http.Response,
 	urlKey string,
 	refs ResponseRefs,
@@ -45,7 +47,7 @@ func (r *responseStorer) StoreResponse(
 
 	vary := resp.Header.Get("Vary")
 	varyResolved := maps.Collect(
-		r.vhn.NormalizeVaryHeader(vary, resp.Request.Header),
+		r.vhn.NormalizeVaryHeader(vary, req.Header),
 	)
 	responseID := r.vk.VaryKey(urlKey, varyResolved)
 

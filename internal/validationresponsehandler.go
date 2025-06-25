@@ -87,7 +87,15 @@ func (r *validationResponseHandler) HandleValidationResponse(
 		// RFC 9111 §3.2 Storing Responses
 		ccResp := ParseCCResponseDirectives(resp.Header)
 		if r.ce.CanStoreResponse(resp, ctx.CCReq, ccResp) {
-			_ = r.rs.StoreResponse(resp, ctx.URLKey, ctx.Refs, ctx.Start, ctx.End, ctx.RefIndex)
+			_ = r.rs.StoreResponse(
+				req,
+				resp,
+				ctx.URLKey,
+				ctx.Refs,
+				ctx.Start,
+				ctx.End,
+				ctx.RefIndex,
+			)
 			CacheStatusMiss.ApplyTo(resp.Header)
 		} else {
 			if IsUnsafeMethod(req) && IsNonErrorStatus(resp.StatusCode) {

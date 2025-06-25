@@ -108,11 +108,11 @@ To use a custom [ServeMux](https://pkg.go.dev/net/http#ServeMux), pass `expapi.W
 
 ## Options
 
-| Option                             | Description                            | Default Value                   |
-| ---------------------------------- | -------------------------------------- | ------------------------------- |
-| `WithTransport(http.RoundTripper)` | Set the underlying transport           | `http.DefaultTransport`         |
-| `WithSWRTimeout(time.Duration)`    | Set the stale-while-revalidate timeout | `5 * time.Second`               |
-| `WithLogger(*slog.Logger)`         | Set a logger for debug output          | `slog.New(slog.DiscardHandler)` |
+| Option                            | Description                                        | Default Value                   |
+| --------------------------------- | -------------------------------------------------- | ------------------------------- |
+| `WithUpstream(http.RoundTripper)` | Set the round tripper for upstream/origin requests | `http.DefaultTransport`         |
+| `WithSWRTimeout(time.Duration)`   | Set the stale-while-revalidate timeout             | `5 * time.Second`               |
+| `WithLogger(*slog.Logger)`        | Set a logger for debug output                      | `slog.New(slog.DiscardHandler)` |
 
 ## Cache Status Header
 

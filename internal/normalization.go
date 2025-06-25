@@ -267,16 +267,17 @@ func NewVaryHeaderNormalizer() VaryHeaderNormalizer {
 	return VaryHeaderNormalizerFunc(normalizeVaryHeaderSeq2)
 }
 
-func normalizeVaryHeaderSeq2(vary string, reqHeaders http.Header) iter.Seq2[string, string] {
+func normalizeVaryHeaderSeq2(vary string, reqHeader http.Header) iter.Seq2[string, string] {
 	return func(yield func(string, string) bool) {
-		for field := range TrimmedCSVSeq(vary) {
-			name := http.CanonicalHeaderKey(field)
-			value := reqHeaders[name]
-			if len(value) == 0 {
-				continue
+		for name := range TrimmedCSVCanonicalSeq(vary) {
+			values := reqHeader[name]
+			value := ""
+			// an empty value is valid and means "no variation"
+			if len(values) > 0 {
+				// NOTE: The policy of this cache is to use just the first header line
+				value = normalizeHeaderValue(name, values[0])
 			}
-			// the policy of this cache is to use just the first line
-			if !yield(name, normalizeHeaderValue(name, value[0])) {
+			if !yield(name, value) {
 				return
 			}
 		}

@@ -11,7 +11,7 @@ import (
 // entries for URIs in Location or Content-Location headers, but only if they
 // share the same origin as the target URI.
 type CacheInvalidator interface {
-	InvalidateCache(reqURL *url.URL, respHeader http.Header, headers ResponseRefs, key string)
+	InvalidateCache(reqURL *url.URL, respHeader http.Header, refs ResponseRefs, key string)
 }
 
 type cacheInvalidator struct {

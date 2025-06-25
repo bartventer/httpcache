@@ -1,7 +1,9 @@
 package internal
 
 import (
+	"iter"
 	"net/http"
+	"net/textproto"
 	"net/url"
 	"strconv"
 	"strings"
@@ -58,8 +60,8 @@ func hopByHopHeaders(respHeader http.Header) map[string]struct{} {
 		// Also see net/http/response.go "respExcludeHeader" for additional excluded headers.
 	}
 	// Fields listed in the Connection header field
-	for field := range TrimmedCSVSeq(respHeader.Get("Connection")) {
-		m[http.CanonicalHeaderKey(field)] = struct{}{}
+	for field := range TrimmedCSVCanonicalSeq(respHeader.Get("Connection")) {
+		m[field] = struct{}{}
 	}
 	return m
 }
@@ -148,4 +150,56 @@ func IsUnsafeMethod(req *http.Request) bool {
 
 func IsNonErrorStatus(status int) bool {
 	return (status >= 200 && status < 400)
+}
+
+// TrimmedCSVSeq returns an iterator over the raw comma-separated string.
+// It yields each part of the string, trimmed of whitespace, and does not split inside quoted strings.
+func TrimmedCSVSeq(s string) iter.Seq[string] {
+	return func(yield func(string) bool) {
+		var part strings.Builder
+		inQuotes := false
+		escape := false
+		for i := range len(s) {
+			c := s[i]
+			switch {
+			case escape:
+				part.WriteByte(c)
+				escape = false
+			case c == '\\':
+				part.WriteByte(c)
+				escape = true
+			case c == '"':
+				part.WriteByte(c)
+				inQuotes = !inQuotes
+			case c == ',' && !inQuotes:
+				p := textproto.TrimString(part.String())
+				if len(p) > 0 {
+					if !yield(p) {
+						return
+					}
+				}
+				part.Reset()
+			default:
+				part.WriteByte(c)
+			}
+		}
+		if part.Len() > 0 {
+			p := textproto.TrimString(part.String())
+			if len(p) > 0 {
+				_ = yield(p)
+			}
+		}
+	}
+}
+
+// TrimmedCSVCanonicalSeq is the same as [TrimmedCSVSeq], but it yields each part
+// in canonical form.
+func TrimmedCSVCanonicalSeq(s string) iter.Seq[string] {
+	return func(yield func(string) bool) {
+		for part := range TrimmedCSVSeq(s) {
+			if !yield(http.CanonicalHeaderKey(part)) {
+				return
+			}
+		}
+	}
 }

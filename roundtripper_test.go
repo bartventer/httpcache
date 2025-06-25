@@ -16,11 +16,10 @@ import (
 	_ "github.com/bartventer/httpcache/store/memcache"
 )
 
-// Helper to create a roundTripper with custom fields for each test.
-func newTestRoundTripper(fields func(rt *roundTripper)) *roundTripper {
-	rt := &roundTripper{
+func mockTransport(fields func(rt *transport)) *transport {
+	rt := &transport{
 		cache:      &internal.MockResponseCache{},
-		transport:  http.DefaultTransport,
+		upstream:   http.DefaultTransport,
 		swrTimeout: DefaultSWRTimeout,
 		logger:     slog.New(slog.DiscardHandler),
 		rmc: &internal.MockRequestMethodChecker{
@@ -67,7 +66,7 @@ func assertCacheStatus(t *testing.T, resp *http.Response, expectedStatus interna
 	}
 }
 
-func TestRoundTripper_CacheMissAndStore(t *testing.T) {
+func Test_transport_CacheMissAndStore(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "max-age=60")
 		w.WriteHeader(http.StatusOK)
@@ -82,16 +81,16 @@ func TestRoundTripper_CacheMissAndStore(t *testing.T) {
 	}
 	respCache := internal.NewResponseCache(mockCache)
 
-	rt := newTestRoundTripper(func(rt *roundTripper) {
+	rt := mockTransport(func(rt *transport) {
 		rt.cache = respCache
-		rt.transport = http.DefaultTransport
+		rt.upstream = http.DefaultTransport
 		rt.ce = internal.CacheabilityEvaluatorFunc(
 			func(resp *http.Response, reqCC internal.CCRequestDirectives, resCC internal.CCResponseDirectives) bool {
 				return true // Simulating a cacheable response
 			},
 		)
 		rt.rs = &internal.MockResponseStorer{
-			StoreResponseFunc: func(resp *http.Response, key string, headers internal.ResponseRefs, reqTime, respTime time.Time, refIndex int) error {
+			StoreResponseFunc: func(req *http.Request, resp *http.Response, key string, headers internal.ResponseRefs, reqTime, respTime time.Time, refIndex int) error {
 				return nil
 			},
 		}
@@ -104,7 +103,7 @@ func TestRoundTripper_CacheMissAndStore(t *testing.T) {
 	assertCacheStatus(t, resp, internal.CacheStatusMiss)
 }
 
-func TestRoundTripper_CacheHit(t *testing.T) {
+func Test_transport_CacheHit(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Fatal("should not hit origin server on cache hit")
 	}))
@@ -129,9 +128,9 @@ func TestRoundTripper_CacheHit(t *testing.T) {
 		DeleteFunc: func(key string) error { return nil },
 	}
 
-	rt := newTestRoundTripper(func(rt *roundTripper) {
+	rt := mockTransport(func(rt *transport) {
 		rt.cache = mockRespCache
-		rt.transport = http.DefaultTransport
+		rt.upstream = http.DefaultTransport
 	})
 
 	req, _ := http.NewRequest(http.MethodGet, server.URL, nil)
@@ -141,7 +140,7 @@ func TestRoundTripper_CacheHit(t *testing.T) {
 	assertCacheStatus(t, resp, internal.CacheStatusHit)
 }
 
-func TestRoundTripper_CacheHit_Immutable(t *testing.T) {
+func Test_transport_CacheHit_Immutable(t *testing.T) {
 	storedResp := &http.Response{
 		StatusCode: http.StatusOK,
 		Header:     http.Header{"Cache-Control": []string{"max-age=60, immutable"}},
@@ -153,7 +152,7 @@ func TestRoundTripper_CacheHit_Immutable(t *testing.T) {
 		ReceivedAt:  time.Now(),
 	}
 
-	rt := newTestRoundTripper(func(rt *roundTripper) {
+	rt := mockTransport(func(rt *transport) {
 		rt.cache = &internal.MockResponseCache{
 			GetFunc: func(key string, req *http.Request) (*internal.Response, error) { return storedEntry, nil },
 			GetRefsFunc: func(key string) (internal.ResponseRefs, error) {
@@ -179,7 +178,7 @@ func TestRoundTripper_CacheHit_Immutable(t *testing.T) {
 	assertCacheStatus(t, resp, internal.CacheStatusHit)
 }
 
-func TestRoundTripper_CacheHit_MustRevalidate_Stale(t *testing.T) {
+func Test_transport_CacheHit_MustRevalidate_Stale(t *testing.T) {
 	storedResp := &http.Response{
 		StatusCode: http.StatusOK,
 		Header:     http.Header{"Cache-Control": []string{"max-age=0, must-revalidate"}},
@@ -192,7 +191,7 @@ func TestRoundTripper_CacheHit_MustRevalidate_Stale(t *testing.T) {
 	}
 	mockVHCalled := false
 
-	rt := newTestRoundTripper(func(rt *roundTripper) {
+	rt := mockTransport(func(rt *transport) {
 		rt.cache = &internal.MockResponseCache{
 			GetFunc: func(key string, req *http.Request) (*internal.Response, error) { return storedEntry, nil },
 			GetRefsFunc: func(key string) (internal.ResponseRefs, error) {
@@ -219,7 +218,7 @@ func TestRoundTripper_CacheHit_MustRevalidate_Stale(t *testing.T) {
 	testutil.AssertNotNil(t, resp)
 }
 
-func TestRoundTripper_CacheHit_NoCacheUnqualified(t *testing.T) {
+func Test_transport_CacheHit_NoCacheUnqualified(t *testing.T) {
 	storedResp := &http.Response{
 		StatusCode: http.StatusOK,
 		Header:     http.Header{"Cache-Control": []string{"max-age=60, no-cache"}},
@@ -232,7 +231,7 @@ func TestRoundTripper_CacheHit_NoCacheUnqualified(t *testing.T) {
 	}
 	mockVHCalled := false
 
-	rt := newTestRoundTripper(func(rt *roundTripper) {
+	rt := mockTransport(func(rt *transport) {
 		rt.cache = &internal.MockResponseCache{
 			GetFunc: func(key string, req *http.Request) (*internal.Response, error) { return storedEntry, nil },
 			GetRefsFunc: func(key string) (internal.ResponseRefs, error) {
@@ -253,7 +252,7 @@ func TestRoundTripper_CacheHit_NoCacheUnqualified(t *testing.T) {
 	testutil.AssertTrue(t, mockVHCalled)
 	testutil.AssertNotNil(t, resp)
 }
-func TestRoundTripper_CacheHit_NoCacheQualified_StripsFields(t *testing.T) {
+func Test_transport_CacheHit_NoCacheQualified_StripsFields(t *testing.T) {
 	storedResp := &http.Response{
 		StatusCode: http.StatusOK,
 		Header: http.Header{
@@ -270,7 +269,7 @@ func TestRoundTripper_CacheHit_NoCacheQualified_StripsFields(t *testing.T) {
 		ReceivedAt:  time.Now(),
 	}
 
-	rt := newTestRoundTripper(func(rt *roundTripper) {
+	rt := mockTransport(func(rt *transport) {
 		rt.cache = &internal.MockResponseCache{
 			GetFunc: func(key string, req *http.Request) (*internal.Response, error) { return storedEntry, nil },
 			GetRefsFunc: func(key string) (internal.ResponseRefs, error) {
@@ -287,12 +286,12 @@ func TestRoundTripper_CacheHit_NoCacheQualified_StripsFields(t *testing.T) {
 	testutil.AssertEqual(t, "should-stay", resp.Header.Get("Baz"))
 }
 
-func TestRoundTripper_UnrecognizedSafeMethod_Error(t *testing.T) {
-	rt := newTestRoundTripper(func(rt *roundTripper) {
+func Test_transport_UnrecognizedSafeMethod_Error(t *testing.T) {
+	rt := mockTransport(func(rt *transport) {
 		rt.rmc = &internal.MockRequestMethodChecker{
 			IsRequestMethodUnderstoodFunc: func(req *http.Request) bool { return false },
 		}
-		rt.transport = &internal.MockRoundTripper{
+		rt.upstream = &internal.MockRoundTripper{
 			RoundTripFunc: func(req *http.Request) (*http.Response, error) {
 				return nil, testutil.ErrSample
 			},
@@ -304,10 +303,10 @@ func TestRoundTripper_UnrecognizedSafeMethod_Error(t *testing.T) {
 	testutil.AssertNil(t, resp)
 }
 
-func TestRoundTripper_NotUnderstoodAndUnsafeMethod(t *testing.T) {
+func Test_transport_NotUnderstoodAndUnsafeMethod(t *testing.T) {
 	roundTripperCalled := false
 	invalidateCalled := false
-	rt := newTestRoundTripper(func(rt *roundTripper) {
+	rt := mockTransport(func(rt *transport) {
 		rt.cache = &internal.MockResponseCache{
 			GetRefsFunc: func(key string) (internal.ResponseRefs, error) {
 				return nil, nil
@@ -321,7 +320,7 @@ func TestRoundTripper_NotUnderstoodAndUnsafeMethod(t *testing.T) {
 				invalidateCalled = true
 			},
 		}
-		rt.transport = &internal.MockRoundTripper{
+		rt.upstream = &internal.MockRoundTripper{
 			RoundTripFunc: func(req *http.Request) (*http.Response, error) {
 				roundTripperCalled = true
 				return &http.Response{
@@ -341,13 +340,13 @@ func TestRoundTripper_NotUnderstoodAndUnsafeMethod(t *testing.T) {
 	assertCacheStatus(t, resp, internal.CacheStatusBypass)
 }
 
-func TestRoundTripper_NotUnderstoodAndSafeMethod(t *testing.T) {
+func Test_transport_NotUnderstoodAndSafeMethod(t *testing.T) {
 	roundTripperCalled := false
-	rt := newTestRoundTripper(func(rt *roundTripper) {
+	rt := mockTransport(func(rt *transport) {
 		rt.rmc = &internal.MockRequestMethodChecker{
 			IsRequestMethodUnderstoodFunc: func(req *http.Request) bool { return false },
 		}
-		rt.transport = &internal.MockRoundTripper{
+		rt.upstream = &internal.MockRoundTripper{
 			RoundTripFunc: func(req *http.Request) (*http.Response, error) {
 				roundTripperCalled = true
 				return &http.Response{
@@ -366,9 +365,9 @@ func TestRoundTripper_NotUnderstoodAndSafeMethod(t *testing.T) {
 	assertCacheStatus(t, resp, internal.CacheStatusBypass)
 }
 
-func TestRoundTripper_NonErrorStatusInvalidation(t *testing.T) {
+func Test_transport_NonErrorStatusInvalidation(t *testing.T) {
 	invalidateCalled := false
-	rt := newTestRoundTripper(func(rt *roundTripper) {
+	rt := mockTransport(func(rt *transport) {
 		rt.cache = &internal.MockResponseCache{
 			GetRefsFunc: func(key string) (internal.ResponseRefs, error) {
 				return internal.ResponseRefs{{}}, nil
@@ -377,7 +376,7 @@ func TestRoundTripper_NonErrorStatusInvalidation(t *testing.T) {
 		rt.rmc = &internal.MockRequestMethodChecker{
 			IsRequestMethodUnderstoodFunc: func(req *http.Request) bool { return false },
 		}
-		rt.transport = &internal.MockRoundTripper{
+		rt.upstream = &internal.MockRoundTripper{
 			RoundTripFunc: func(req *http.Request) (*http.Response, error) {
 				return &http.Response{
 					StatusCode: http.StatusOK,
@@ -400,13 +399,13 @@ func TestRoundTripper_NonErrorStatusInvalidation(t *testing.T) {
 	assertCacheStatus(t, resp, internal.CacheStatusBypass)
 }
 
-func TestRoundTripper_NotUnderstoodAndRoundTripError(t *testing.T) {
+func Test_transport_NotUnderstoodAndRoundTripError(t *testing.T) {
 	roundTripperCalled := false
-	rt := newTestRoundTripper(func(rt *roundTripper) {
+	rt := mockTransport(func(rt *transport) {
 		rt.rmc = &internal.MockRequestMethodChecker{
 			IsRequestMethodUnderstoodFunc: func(req *http.Request) bool { return false },
 		}
-		rt.transport = &internal.MockRoundTripper{
+		rt.upstream = &internal.MockRoundTripper{
 			RoundTripFunc: func(req *http.Request) (*http.Response, error) {
 				roundTripperCalled = true
 				return nil, testutil.ErrSample
@@ -420,8 +419,8 @@ func TestRoundTripper_NotUnderstoodAndRoundTripError(t *testing.T) {
 	testutil.AssertTrue(t, roundTripperCalled)
 }
 
-func TestRoundTripper_OnlyIfCached504(t *testing.T) {
-	rt := newTestRoundTripper(func(rt *roundTripper) {
+func Test_transport_OnlyIfCached504(t *testing.T) {
+	rt := mockTransport(func(rt *transport) {
 		rt.cache = &internal.MockResponseCache{
 			GetFunc: func(key string, req *http.Request) (*internal.Response, error) {
 				return nil, errors.New("cache miss")
@@ -444,8 +443,8 @@ func TestRoundTripper_OnlyIfCached504(t *testing.T) {
 	assertCacheStatus(t, resp, internal.CacheStatusBypass)
 }
 
-func TestRoundTripper_CacheMissWithError(t *testing.T) {
-	rt := newTestRoundTripper(func(rt *roundTripper) {
+func Test_transport_CacheMissWithError(t *testing.T) {
+	rt := mockTransport(func(rt *transport) {
 		rt.cache = &internal.MockResponseCache{
 			GetFunc: func(key string, req *http.Request) (*internal.Response, error) {
 				return nil, errors.New("cache miss")
@@ -459,7 +458,7 @@ func TestRoundTripper_CacheMissWithError(t *testing.T) {
 				return 0, true
 			},
 		}
-		rt.transport = &internal.MockRoundTripper{
+		rt.upstream = &internal.MockRoundTripper{
 			RoundTripFunc: func(req *http.Request) (*http.Response, error) {
 				return nil, testutil.ErrSample
 			},
@@ -471,7 +470,7 @@ func TestRoundTripper_CacheMissWithError(t *testing.T) {
 	testutil.AssertNil(t, resp)
 }
 
-func TestRoundTripper_RevalidationPath(t *testing.T) {
+func Test_transport_RevalidationPath(t *testing.T) {
 	storedResp := &http.Response{
 		StatusCode: http.StatusOK,
 		Header:     http.Header{"Cache-Control": []string{"max-age=0"}},
@@ -484,7 +483,7 @@ func TestRoundTripper_RevalidationPath(t *testing.T) {
 	}
 	mockVHCalled := false
 
-	rt := newTestRoundTripper(func(rt *roundTripper) {
+	rt := mockTransport(func(rt *transport) {
 		rt.cache = &internal.MockResponseCache{
 			GetFunc: func(key string, req *http.Request) (*internal.Response, error) { return storedEntry, nil },
 			GetRefsFunc: func(key string) (internal.ResponseRefs, error) {
@@ -510,7 +509,7 @@ func TestRoundTripper_RevalidationPath(t *testing.T) {
 		}
 		rt.clock = &internal.MockClock{NowResult: time.Now()}
 		rt.siep = &internal.MockStaleIfErrorPolicy{}
-		rt.transport = &internal.MockRoundTripper{
+		rt.upstream = &internal.MockRoundTripper{
 			RoundTripFunc: func(req *http.Request) (*http.Response, error) {
 				return &http.Response{
 					StatusCode: http.StatusOK,
@@ -536,7 +535,7 @@ func TestRoundTripper_RevalidationPath(t *testing.T) {
 	assertCacheStatus(t, resp, internal.CacheStatusRevalidated)
 }
 
-func TestRoundTripper_SWR_NormalPath(t *testing.T) {
+func Test_transport_SWR_NormalPath(t *testing.T) {
 	base := time.Unix(0, 0).UTC()
 	// Simulate a stale cache entry with SWR, normal revalidation path (no timeout).
 	storedResp := &http.Response{
@@ -550,7 +549,7 @@ func TestRoundTripper_SWR_NormalPath(t *testing.T) {
 		ReceivedAt:  base.Add(-10 * time.Second),
 	}
 	revalidateCalled := make(chan struct{}, 1)
-	rt := newTestRoundTripper(func(rt *roundTripper) {
+	rt := mockTransport(func(rt *transport) {
 		rt.cache = &internal.MockResponseCache{
 			GetFunc: func(key string, req *http.Request) (*internal.Response, error) { return storedEntry, nil },
 			GetRefsFunc: func(key string) (internal.ResponseRefs, error) {
@@ -583,7 +582,7 @@ func TestRoundTripper_SWR_NormalPath(t *testing.T) {
 			},
 		}
 		rt.swrTimeout = DefaultSWRTimeout
-		rt.transport = &internal.MockRoundTripper{
+		rt.upstream = &internal.MockRoundTripper{
 			RoundTripFunc: func(req *http.Request) (*http.Response, error) {
 				return &http.Response{
 					StatusCode: http.StatusOK,
@@ -607,7 +606,7 @@ func TestRoundTripper_SWR_NormalPath(t *testing.T) {
 	}
 }
 
-func TestRoundTripper_SWR_NormalPathAndError(t *testing.T) {
+func Test_transport_SWR_NormalPathAndError(t *testing.T) {
 	base := time.Unix(0, 0).UTC()
 	// Simulate a stale cache entry with SWR, normal revalidation path with error.
 	storedResp := &http.Response{
@@ -623,7 +622,7 @@ func TestRoundTripper_SWR_NormalPathAndError(t *testing.T) {
 	swrTimeout := 100 * time.Millisecond
 
 	revalidateCalled := make(chan struct{}, 1)
-	rt := newTestRoundTripper(func(rt *roundTripper) {
+	rt := mockTransport(func(rt *transport) {
 		rt.cache = &internal.MockResponseCache{
 			GetFunc: func(key string, req *http.Request) (*internal.Response, error) { return storedEntry, nil },
 			GetRefsFunc: func(key string) (internal.ResponseRefs, error) {
@@ -655,7 +654,7 @@ func TestRoundTripper_SWR_NormalPathAndError(t *testing.T) {
 				return nil, errors.New("revalidation error")
 			},
 		}
-		rt.transport = &internal.MockRoundTripper{
+		rt.upstream = &internal.MockRoundTripper{
 			RoundTripFunc: func(req *http.Request) (*http.Response, error) {
 				return nil, errors.New("network error") // Simulate an error during revalidation
 			},
@@ -674,7 +673,7 @@ func TestRoundTripper_SWR_NormalPathAndError(t *testing.T) {
 	}
 }
 
-func TestRoundTripper_SWR_Timeout(t *testing.T) {
+func Test_transport_SWR_Timeout(t *testing.T) {
 	base := time.Unix(0, 0).UTC()
 	// Simulate a stale cache entry with SWR, but timeout before revalidation.
 	storedResp := &http.Response{
@@ -690,7 +689,7 @@ func TestRoundTripper_SWR_Timeout(t *testing.T) {
 	swrTimeout := 50 * time.Millisecond
 
 	revalidateCalled := make(chan struct{}, 1)
-	rt := newTestRoundTripper(func(rt *roundTripper) {
+	rt := mockTransport(func(rt *transport) {
 		rt.cache = &internal.MockResponseCache{
 			GetFunc: func(key string, req *http.Request) (*internal.Response, error) { return storedEntry, nil },
 			GetRefsFunc: func(key string) (internal.ResponseRefs, error) {
@@ -722,7 +721,7 @@ func TestRoundTripper_SWR_Timeout(t *testing.T) {
 				return resp, err
 			},
 		}
-		rt.transport = &internal.MockRoundTripper{
+		rt.upstream = &internal.MockRoundTripper{
 			RoundTripFunc: func(req *http.Request) (*http.Response, error) {
 				time.Sleep(swrTimeout + 500*time.Millisecond) // Simulate long revalidation
 				return &http.Response{
@@ -753,28 +752,28 @@ func Test_newTransport(t *testing.T) {
 	l := slog.New(slog.DiscardHandler)
 	swrTimeout := 100 * time.Millisecond
 	mockCache := &internal.MockCache{}
-	rt := newTransport(mockCache, WithTransport(mockTransport),
+	rt := newTransport(mockCache, WithUpstream(mockTransport),
 		WithLogger(l),
 		WithSWRTimeout(swrTimeout),
 	)
 	testutil.RequireNotNil(t, rt)
-	testutil.AssertTrue(t, mockTransport == rt.(*roundTripper).transport)
-	testutil.AssertTrue(t, l == rt.(*roundTripper).logger)
-	testutil.AssertEqual(t, swrTimeout, rt.(*roundTripper).swrTimeout)
+	testutil.AssertTrue(t, mockTransport == rt.(*transport).upstream)
+	testutil.AssertTrue(t, l == rt.(*transport).logger)
+	testutil.AssertEqual(t, swrTimeout, rt.(*transport).swrTimeout)
 }
 
 func TestNewTransport_Panic(t *testing.T) {
 	testutil.RequirePanics(t, func() {
 		NewTransport(
 			"invalid-cache-dsn",
-			WithTransport(http.DefaultTransport),
+			WithUpstream(http.DefaultTransport),
 			WithLogger(slog.New(slog.DiscardHandler)),
 		)
 	})
 }
 
 //nolint:cyclop // Acceptable complexity for a test function
-func TestRoundTripper_Vary(t *testing.T) {
+func Test_transport_Vary(t *testing.T) {
 	etag := `W/"1234567890"`
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Vary", "Accept-Language, Accept-Encoding, User-Agent")

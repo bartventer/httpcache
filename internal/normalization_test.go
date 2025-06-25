@@ -1,6 +1,8 @@
 package internal
 
 import (
+	"maps"
+	"net/http"
 	"strconv"
 	"testing"
 
@@ -150,6 +152,54 @@ func Test_makeVaryKey(t *testing.T) {
 				want := tt.wantPrefix + tt.wantHash()
 				testutil.AssertEqual(t, want, got)
 			}
+		})
+	}
+}
+
+func TestNewVaryHeaderNormalizer(t *testing.T) {
+	type args struct {
+		vary      string
+		reqHeader http.Header
+	}
+	tests := []struct {
+		name string
+		args args
+		want map[string]string
+	}{
+		{
+			name: "empty vary header",
+			args: args{
+				vary:      "",
+				reqHeader: http.Header{},
+			},
+			want: map[string]string{},
+		},
+		{
+			name: "req contains vary header",
+			args: args{
+				vary:      "Accept",
+				reqHeader: http.Header{"Accept": {"text/html"}},
+			},
+			want: map[string]string{
+				"Accept": "text/html",
+			},
+		},
+		{
+			name: "req does not contain vary header",
+			args: args{
+				vary:      "Accept",
+				reqHeader: http.Header{"Content-Type": {"application/json"}},
+			},
+			want: map[string]string{
+				"Accept": "",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			n := NewVaryHeaderNormalizer()
+			got := maps.Collect(n.NormalizeVaryHeader(tt.args.vary, tt.args.reqHeader))
+			testutil.AssertTrue(t, maps.Equal(got, tt.want), "got: %v, want: %v", got, tt.want)
 		})
 	}
 }

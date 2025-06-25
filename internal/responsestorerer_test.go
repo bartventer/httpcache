@@ -18,6 +18,7 @@ func Test_responseStorer_StoreResponse(t *testing.T) {
 		vk    VaryKeyer
 	}
 	type args struct {
+		req               *http.Request
 		resp              *http.Response
 		key               string
 		refs              ResponseRefs
@@ -56,12 +57,12 @@ func Test_responseStorer_StoreResponse(t *testing.T) {
 				}),
 			},
 			args: args{
+				req: &http.Request{
+					Header: http.Header{"Accept": []string{"text/html"}},
+				},
 				resp: &http.Response{
 					Header: http.Header{
 						"Vary": {"Accept"},
-					},
-					Request: &http.Request{
-						Header: http.Header{"Accept": []string{"text/html"}},
 					},
 				},
 				key:      "test-key",
@@ -97,12 +98,12 @@ func Test_responseStorer_StoreResponse(t *testing.T) {
 				}),
 			},
 			args: args{
+				req: &http.Request{
+					Header: http.Header{"Accept": []string{"text/html"}},
+				},
 				resp: &http.Response{
 					Header: http.Header{
 						"Vary": {"Accept"},
-					},
-					Request: &http.Request{
-						Header: http.Header{"Accept": []string{"text/html"}},
 					},
 				},
 				key: "test-key",
@@ -145,12 +146,12 @@ func Test_responseStorer_StoreResponse(t *testing.T) {
 				}),
 			},
 			args: args{
+				req: &http.Request{
+					Header: http.Header{"Accept": []string{"text/html"}},
+				},
 				resp: &http.Response{
 					Header: http.Header{
 						"Vary": {"Accept"},
-					},
-					Request: &http.Request{
-						Header: http.Header{"Accept": []string{"text/html"}},
 					},
 				},
 				key: "test-key",
@@ -191,12 +192,12 @@ func Test_responseStorer_StoreResponse(t *testing.T) {
 				}),
 			},
 			args: args{
+				req: &http.Request{
+					Header: http.Header{"Accept": []string{"text/html"}},
+				},
 				resp: &http.Response{
 					Header: http.Header{
 						"Vary": {"Accept"},
-					},
-					Request: &http.Request{
-						Header: http.Header{"Accept": []string{"text/html"}},
 					},
 				},
 				key:      "test-key",
@@ -219,6 +220,7 @@ func Test_responseStorer_StoreResponse(t *testing.T) {
 			}
 			FixDateHeader(tt.args.resp.Header, tt.args.respTime)
 			err := r.StoreResponse(
+				tt.args.req,
 				tt.args.resp,
 				tt.args.key,
 				tt.args.refs,
