@@ -137,17 +137,18 @@ func (m *MockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 var _ ResponseStorer = (*MockResponseStorer)(nil)
 
 type MockResponseStorer struct {
-	StoreResponseFunc func(resp *http.Response, key string, headers ResponseRefs, reqTime, respTime time.Time, refIndex int) error
+	StoreResponseFunc func(req *http.Request, resp *http.Response, key string, headers ResponseRefs, reqTime, respTime time.Time, refIndex int) error
 }
 
 func (m *MockResponseStorer) StoreResponse(
+	req *http.Request,
 	resp *http.Response,
 	key string,
 	headers ResponseRefs,
 	reqTime, respTime time.Time,
 	refIndex int,
 ) error {
-	return m.StoreResponseFunc(resp, key, headers, reqTime, respTime, refIndex)
+	return m.StoreResponseFunc(req, resp, key, headers, reqTime, respTime, refIndex)
 }
 
 var _ CacheInvalidator = (*MockCacheInvalidator)(nil)

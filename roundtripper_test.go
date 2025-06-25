@@ -91,7 +91,7 @@ func TestRoundTripper_CacheMissAndStore(t *testing.T) {
 			},
 		)
 		rt.rs = &internal.MockResponseStorer{
-			StoreResponseFunc: func(resp *http.Response, key string, headers internal.ResponseRefs, reqTime, respTime time.Time, refIndex int) error {
+			StoreResponseFunc: func(req *http.Request, resp *http.Response, key string, headers internal.ResponseRefs, reqTime, respTime time.Time, refIndex int) error {
 				return nil
 			},
 		}

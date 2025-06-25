@@ -254,7 +254,7 @@ func (r *roundTripper) handleCacheMiss(
 	}
 	ccResp := internal.ParseCCResponseDirectives(resp.Header)
 	if r.ce.CanStoreResponse(resp, ccReq, ccResp) {
-		_ = r.rs.StoreResponse(resp, urlKey, refs, start, end, refIndex)
+		_ = r.rs.StoreResponse(req, resp, urlKey, refs, start, end, refIndex)
 	}
 	internal.CacheStatusMiss.ApplyTo(resp.Header)
 	return resp, nil
