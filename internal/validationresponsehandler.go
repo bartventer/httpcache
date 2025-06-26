@@ -5,22 +5,6 @@ import (
 	"time"
 )
 
-const CacheStatusHeader = "X-Httpcache-Status"
-
-type CacheStatus string
-
-// ApplyTo sets the cache status header on the provided HTTP header.
-func (s CacheStatus) ApplyTo(header http.Header) { header.Set(CacheStatusHeader, s.String()) }
-func (s CacheStatus) String() string             { return string(s) }
-
-const (
-	CacheStatusHit         CacheStatus = "HIT"         // Response was served from cache
-	CacheStatusMiss        CacheStatus = "MISS"        // Response was not found in cache, and was served from origin
-	CacheStatusStale       CacheStatus = "STALE"       // Response was served from cache but is stale
-	CacheStatusRevalidated CacheStatus = "REVALIDATED" // Response was revalidated with the origin server
-	CacheStatusBypass      CacheStatus = "BYPASS"      // Response was not served from cache due to cache bypass
-)
-
 type ValidationResponseHandler interface {
 	HandleValidationResponse(
 		ctx RevalidationContext,
