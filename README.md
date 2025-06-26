@@ -119,24 +119,24 @@ To use a custom [ServeMux](https://pkg.go.dev/net/http#ServeMux), pass `expapi.W
 This package sets a cache status header on every response:
 
 - `X-Httpcache-Status`: The primary, detailed cache status header (always set).
-- `X-Cache-Status`: (Legacy) Provided for compatibility with [`gregjones/httpcache`](https://github.com/gregjones/httpcache). Only set for cache hits/stale/revalidated responses.
+- `X-From-Cache`: (Legacy) Provided for compatibility with [`gregjones/httpcache`](https://github.com/gregjones/httpcache). Only set for cache hits/stale/revalidated responses.
 
 ### Header Value Mapping
 
-| X-Httpcache-Status | X-Cache-Status | Description                        |
-| ------------------ | -------------- | ---------------------------------- |
-| HIT                | 1              | Served from cache                  |
-| STALE              | 1              | Served from cache but stale        |
-| REVALIDATED        | 1              | Revalidated with origin            |
-| MISS               | *(not set)*    | Served from origin                 |
-| BYPASS             | *(not set)*    | Bypassed cache, served from origin |
+| X-Httpcache-Status | X-From-Cache | Description                        |
+| ------------------ | ------------ | ---------------------------------- |
+| HIT                | 1            | Served from cache                  |
+| STALE              | 1            | Served from cache but stale        |
+| REVALIDATED        | 1            | Revalidated with origin            |
+| MISS               | *(not set)*  | Served from origin                 |
+| BYPASS             | *(not set)*  | Bypassed cache, served from origin |
 
 ### Example: Stale cache hit
 
 ```http
 HTTP/1.1 200 OK
 X-Httpcache-Status: STALE
-X-Cache-Status: 1
+X-From-Cache: 1
 Content-Type: application/json
 ```
 

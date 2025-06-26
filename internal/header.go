@@ -20,7 +20,7 @@ import (
 
 const (
 	CacheStatusHeader       = "X-Httpcache-Status"
-	CacheStatusHeaderLegacy = "X-Cache-Status" // Deprecated: use [CacheStatusHeader] instead
+	CacheStatusHeaderLegacy = "X-From-Cache" // Deprecated: use [CacheStatusHeader] instead
 )
 
 type CacheStatus struct {
