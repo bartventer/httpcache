@@ -333,6 +333,8 @@ func (r *transport) serveFromCache(
 	return stored.Data, nil
 }
 
+// handleStaleWhileRevalidate serves a stale cached response immediately and triggers
+// background revalidation in a separate goroutine (RFC 5861, §3).
 func (r *transport) handleStaleWhileRevalidate(
 	req *http.Request,
 	stored *internal.Response,
@@ -342,6 +344,12 @@ func (r *transport) handleStaleWhileRevalidate(
 ) (*http.Response, error) {
 	req2 := req.Clone(req.Context())
 	req2 = withConditionalHeaders(req2, stored.Data.Header)
+	// Background revalidation is "best effort"; it is not guaranteed to complete
+	// if the program exits before the goroutine finishes. This design choice was
+	// made to keep the API simple and avoid requiring explicit shutdown coordination.
+	//
+	// Open a discussion at github.com/bartventer/httpcache/issues if your use case requires
+	// guaranteed completion.
 	go r.performBackgroundRevalidation(req2, stored, urlKey, freshness, ccReq)
 	internal.CacheStatusStale.ApplyTo(stored.Data.Header)
 	return stored.Data, nil
