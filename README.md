@@ -17,7 +17,7 @@
 - **Cache Backends**: Built-in support for file system and memory caches, with the ability to implement custom backends (see [Cache Backends](#cache-backends)).
 - **Cache Maintenance API**: Optional REST endpoints for listing, retrieving, and deleting cache entries (see [Cache Maintenance API](#cache-maintenance-api-debug-only)).
 - **Extensible**: Options for logging, transport and timeouts (see [Options](#options)).
-- **Debuggable**: Adds a cache status header to every response (see [Cache Status Header](#cache-status-header)).
+- **Debuggable**: Adds a cache status header to every response (see [Cache Status Headers](#cache-status-headers)).
 - **Zero Dependencies**: No external dependencies, pure Go implementation.
 
 ![Made with VHS](https://vhs.charm.sh/vhs-3WOBtYTZzzXggFGYRudHTV.gif)
@@ -114,22 +114,30 @@ To use a custom [ServeMux](https://pkg.go.dev/net/http#ServeMux), pass `expapi.W
 | `WithSWRTimeout(time.Duration)`   | Set the stale-while-revalidate timeout              | `5 * time.Second`               |
 | `WithLogger(*slog.Logger)`        | Set a logger for debug output                       | `slog.New(slog.DiscardHandler)` |
 
-## Cache Status Header
+## Cache Status Headers
 
-Every response includes a cache status header to indicate how the response was served. The header is named `X-Httpcache-Status` and can have the following values:
+This package sets a cache status header on every response:
 
-| Status        | Description             |
-| ------------- | ----------------------- |
-| `HIT`         | Served from cache       |
-| `MISS`        | Fetched from origin     |
-| `STALE`       | Served stale from cache |
-| `REVALIDATED` | Revalidated with origin |
-| `BYPASS`      | Cache bypassed          |
+- `X-Httpcache-Status`: The primary, detailed cache status header (always set).
+- `X-Cache-Status`: (Legacy) Provided for compatibility with [`gregjones/httpcache`](https://github.com/gregjones/httpcache). Only set for cache hits/stale/revalidated responses.
 
-### Example
+### Header Value Mapping
+
+| X-Httpcache-Status | X-Cache-Status | Description                        |
+| ------------------ | -------------- | ---------------------------------- |
+| HIT                | 1              | Served from cache                  |
+| STALE              | 1              | Served from cache but stale        |
+| REVALIDATED        | 1              | Revalidated with origin            |
+| MISS               | *(not set)*    | Served from origin                 |
+| BYPASS             | *(not set)*    | Bypassed cache, served from origin |
+
+### Example: Stale cache hit
 
 ```http
-X-Httpcache-Status: HIT
+HTTP/1.1 200 OK
+X-Httpcache-Status: STALE
+X-Cache-Status: 1
+Content-Type: application/json
 ```
 
 ## Limitations
