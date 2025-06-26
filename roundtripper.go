@@ -283,12 +283,8 @@ func (r *transport) handleCacheHit(
 		return r.serveFromCache(stored, freshness, isRespNoCacheQualified, respNoCacheFieldsSeq)
 	}
 
-	if freshness.IsStale && ccResp.MustRevalidate() {
-		goto revalidate
-	}
-
-	// Unqualified no-cache: must revalidate before serving from cache
-	if hasRespNoCache && !isRespNoCacheQualified {
+	if (freshness.IsStale && ccResp.MustRevalidate()) ||
+		(hasRespNoCache && !isRespNoCacheQualified) { // Unqualified no-cache: must revalidate before serving from cache
 		goto revalidate
 	}
 
