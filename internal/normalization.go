@@ -151,6 +151,7 @@ func normalizeOrderInsensitiveWithQValues(value string) string {
 	}
 	parts := slices.Collect(TrimmedCSVSeq(value))
 	qualityParts := make([]qualityValue, 0, len(parts))
+outer:
 	for i := range parts {
 		part := parts[i]
 		main, allParamsRaw, found := strings.Cut(part, ";")
@@ -164,7 +165,7 @@ func normalizeOrderInsensitiveWithQValues(value string) string {
 				case len(param) > 2 && strings.EqualFold(param[:2], "q="):
 					qRaw := param[2:]
 					if qRaw == "0" || qRaw == "0.0" {
-						goto skipQualityPart // skip this part, as it has q=0
+						continue outer // skip this part, as it has q=0
 					}
 					if qVal, err := strconv.ParseFloat(qRaw, 64); err == nil {
 						q = unique.Make(
@@ -182,10 +183,6 @@ func normalizeOrderInsensitiveWithQValues(value string) string {
 			q:      q,
 			params: params,
 		})
-		continue
-
-	skipQualityPart:
-		continue
 	}
 
 	// Sort by quality value, then by number of wildcards in main,
