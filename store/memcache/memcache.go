@@ -1,4 +1,4 @@
-// Package memcache provides an in-memory implementation of store.Cache.
+// Package memcache implements an in-memory cache backend.
 //
 // It is suitable for testing or ephemeral caching needs, but does not persist data
 // across process restarts.
