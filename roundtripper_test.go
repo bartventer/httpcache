@@ -61,7 +61,7 @@ func mockTransport(fields func(rt *transport)) *transport {
 func assertCacheStatus(t *testing.T, resp *http.Response, expectedStatus internal.CacheStatus) {
 	t.Helper()
 	status := resp.Header.Get(internal.CacheStatusHeader)
-	if status != expectedStatus.String() {
+	if status != expectedStatus.Value {
 		t.Errorf("expected cache status %s, got %s", expectedStatus, status)
 	}
 }

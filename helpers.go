@@ -14,7 +14,7 @@ func make504Response(req *http.Request) (*http.Response, error) {
 	buf.WriteString("Cache-Control: no-cache\r\n")
 	buf.WriteString("Content-Length: 0\r\n")
 	buf.WriteString(
-		internal.CacheStatusHeader + ": " + internal.CacheStatusBypass.String() + "\r\n",
+		internal.CacheStatusHeader + ": " + internal.CacheStatusBypass.Value + "\r\n",
 	)
 	buf.WriteString("Connection: close\r\n")
 	buf.WriteString("\r\n")
