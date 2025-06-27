@@ -196,6 +196,12 @@ func newTransport(conn driver.Conn, options ...Option) http.RoundTripper {
 	return rt
 }
 
+// NewClient returns a new [http.Client], configured with a transport that
+// caches HTTP responses using the specified cache backend.
+func NewClient(dsn string, options ...Option) *http.Client {
+	return &http.Client{Transport: NewTransport(dsn, options...)}
+}
+
 var _ http.RoundTripper = (*transport)(nil)
 
 func (r *transport) RoundTrip(req *http.Request) (*http.Response, error) {
