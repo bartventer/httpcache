@@ -24,6 +24,7 @@ import (
 	"iter"
 	"net/http"
 	"net/http/httputil"
+	"os"
 	"time"
 )
 
@@ -43,8 +44,30 @@ func (r *Response) DateHeader() time.Time {
 	return date
 }
 
-func (r *Response) ExpiresHeader() RawTime {
-	return RawTime(r.Data.Header.Get("Expires"))
+// Deprecated: This function is a workaround for Kubernetes' handling of "UTC" Expires headers.
+func parseHTTPDateCompat(dateStr string) (t time.Time, err error) {
+	if os.Getenv("HTTPCACHE_ALLOW_UTC_DATETIMEFORMAT") == "1" {
+		// TODO(bartventer): PR Kubernetes to emit "GMT" per RFC 9110 §5.6.7.
+		// See k8s.io/kube-openapi/pkg/handler3/handler.go for "UTC" usage.
+		return time.Parse(time.RFC1123, dateStr)
+	}
+	return
+}
+
+func (r *Response) ExpiresHeader() (t time.Time, found bool, valid bool) {
+	expiresStr := r.Data.Header.Get("Expires")
+	if expiresStr == "" {
+		return
+	}
+	found = true
+	if t, valid = RawTime(expiresStr).Value(); valid {
+		return
+	}
+	expires, err := parseHTTPDateCompat(expiresStr)
+	if err != nil || expires.IsZero() {
+		return time.Time{}, false, false
+	}
+	return expires, true, true
 }
 
 func (r *Response) WriteTo(w io.Writer) (int64, error) {

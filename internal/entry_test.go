@@ -162,3 +162,29 @@ func TestParseResponse(t *testing.T) {
 		})
 	}
 }
+
+func TestParseHTTPDateCompat(t *testing.T) {
+	r := Response{
+		Data: &http.Response{
+			Header: http.Header{
+				"Expires": []string{"Mon, 02 Jan 2006 15:04:05 UTC"},
+			},
+		},
+	}
+	t.Run("Not Enabled", func(t *testing.T) {
+		_, err := parseHTTPDateCompat(r.Data.Header.Get("Expires"))
+		testutil.RequireNoError(t, err)
+
+		_, _, valid := r.ExpiresHeader()
+		testutil.AssertTrue(t, !valid)
+	})
+
+	t.Run("Enabled", func(t *testing.T) {
+		t.Setenv("HTTPCACHE_ALLOW_UTC_DATETIMEFORMAT", "1")
+		_, err := parseHTTPDateCompat(r.Data.Header.Get("Expires"))
+		testutil.RequireNoError(t, err)
+
+		_, found, valid := r.ExpiresHeader()
+		testutil.AssertTrue(t, found && valid)
+	})
+}

@@ -119,14 +119,17 @@ func (f *freshnessCalculator) CalculateFreshness(
 	if maxAge, ok := resCC.MaxAge(); ok && maxAge >= 0 {
 		usefulLife = maxAge // Response is fresh for max-age seconds
 	}
+
 	if usefulLife == 0 {
-		if expires, ok := entry.ExpiresHeader().Value(); ok && expires.After(date) {
+		expires, found, valid := entry.ExpiresHeader()
+		switch {
+		case valid && expires.After(date):
+			// Use Expires header if available
 			usefulLife = expires.Sub(date)
+		case !found && (isHeuristicallyCacheableCode(resp.StatusCode) || resCC.Public()):
+			// Heuristic fallback if allowed by RFC9111 §4.2.2 (only if expires is not set)
+			usefulLife = heuristicFreshness(resp.Header, date)
 		}
-	}
-	// Heuristic fallback if allowed by RFC9111 §4.2.2
-	if usefulLife == 0 && (isHeuristicallyCacheableCode(resp.StatusCode) || resCC.Public()) {
-		usefulLife = heuristicFreshness(resp.Header, date)
 	}
 
 	if reqMaxAge, ok := reqCC.MaxAge(); ok && reqMaxAge > 0 {
