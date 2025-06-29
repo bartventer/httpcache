@@ -19,8 +19,8 @@ import (
 )
 
 const (
-	CacheStatusHeader       = "X-Httpcache-Status"
-	CacheStatusHeaderLegacy = "X-From-Cache" // Deprecated: use [CacheStatusHeader] instead
+	CacheStatusHeader = "X-Httpcache-Status"
+	FromCacheHeader   = "X-From-Cache" // Deprecated: use [CacheStatusHeader] instead
 )
 
 type CacheStatus struct {
@@ -37,14 +37,19 @@ type CacheStatus struct {
 func (s CacheStatus) ApplyTo(header http.Header) {
 	header.Set(CacheStatusHeader, s.Value)
 	if s.Legacy != "" {
-		header.Set(CacheStatusHeaderLegacy, s.Legacy)
+		header.Set(FromCacheHeader, s.Legacy)
 	}
 }
 
+const (
+	FromCache    = "1"
+	NotFromCache = ""
+)
+
 var (
-	CacheStatusHit         = CacheStatus{"HIT", "1"}         // served from cache
-	CacheStatusMiss        = CacheStatus{"MISS", ""}         // served from origin
-	CacheStatusStale       = CacheStatus{"STALE", "1"}       // served from cache but stale
-	CacheStatusRevalidated = CacheStatus{"REVALIDATED", "1"} // revalidated with origin server
-	CacheStatusBypass      = CacheStatus{"BYPASS", ""}       // cache bypassed
+	CacheStatusHit         = CacheStatus{"HIT", FromCache}         // served from cache
+	CacheStatusMiss        = CacheStatus{"MISS", NotFromCache}     // served from origin
+	CacheStatusStale       = CacheStatus{"STALE", FromCache}       // served from cache but stale
+	CacheStatusRevalidated = CacheStatus{"REVALIDATED", FromCache} // revalidated with origin server
+	CacheStatusBypass      = CacheStatus{"BYPASS", NotFromCache}   // cache bypassed
 )
