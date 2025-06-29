@@ -54,6 +54,7 @@ import (
 	"iter"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/bartventer/httpcache/internal"
@@ -224,13 +225,14 @@ func (r *transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	entry, err := r.cache.Get(refs[refIndex].ResponseID, req)
 	if err != nil || entry == nil {
 		r.logger.Warn(
-			"Cache reference found but entry missing or unreadable; possible cache corruption or concurrent eviction. Falling back to cache miss.",
+			"Cache entry missing or unreadable. Possible corruption or eviction.",
 			slog.String("url", req.URL.String()),
 			slog.String("method", req.Method),
-			slog.String("cacheKey", urlKey),
-			slog.Int("refIndex", refIndex),
+			slog.String("drivers", strings.Join(store.Drivers(), ", ")),
+			slog.String("cache_key", urlKey),
+			slog.Int("ref_index", refIndex),
 			slog.String("vary", refs[refIndex].Vary),
-			slog.String("responseID", refs[refIndex].ResponseID),
+			slog.String("response_id", refs[refIndex].ResponseID),
 			slog.Any("error", err),
 		)
 		return r.handleCacheMiss(req, urlKey, refs, refIndex)

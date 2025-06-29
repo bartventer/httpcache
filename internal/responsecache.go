@@ -17,6 +17,7 @@ package internal
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/bartventer/httpcache/store/driver"
@@ -46,6 +47,29 @@ func NewResponseCache(cache Cache) *responseCache {
 
 var _ ResponseCache = (*responseCache)(nil)
 
+type CacheError struct {
+	Op      string
+	Message string
+	Err     error
+}
+
+func (c *CacheError) Error() string { return fmt.Sprintf("%s: %s: %v", c.Op, c.Message, c.Err) }
+func (c *CacheError) Unwrap() error { return c.Err }
+
+func (c *CacheError) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.String("op", c.Op),
+		slog.String("message", c.Message),
+		slog.Any("error", c.Err),
+	)
+}
+
+func newCacheError(err error, op, message string) *CacheError {
+	return &CacheError{Op: op, Message: message, Err: err}
+}
+
+var _ slog.LogValuer = (*CacheError)(nil)
+
 func (r *responseCache) Get(responseKey string, req *http.Request) (*Response, error) {
 	data, err := r.cache.Get(responseKey)
 	if err != nil {
@@ -53,7 +77,11 @@ func (r *responseCache) Get(responseKey string, req *http.Request) (*Response, e
 	}
 	entry, err := ParseResponse(data, req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal cached entry: %w", err)
+		return nil, newCacheError(
+			err,
+			"Get",
+			fmt.Sprintf("failed to unmarshal cached entry for key %q", responseKey),
+		)
 	}
 	return entry, nil
 }
@@ -61,7 +89,11 @@ func (r *responseCache) Get(responseKey string, req *http.Request) (*Response, e
 func (r *responseCache) Set(responseKey string, entry *Response) error {
 	data, err := entry.MarshalBinary()
 	if err != nil {
-		return fmt.Errorf("failed to marshal entry: %w", err)
+		return newCacheError(
+			err,
+			"Set",
+			fmt.Sprintf("failed to marshal entry for key %q", responseKey),
+		)
 	}
 	return r.cache.Set(responseKey, data)
 }
@@ -77,7 +109,11 @@ func (r *responseCache) GetRefs(urlKey string) (ResponseRefs, error) {
 	}
 	var refs ResponseRefs
 	if unmarshalErr := json.Unmarshal(data, &refs); unmarshalErr != nil {
-		return nil, fmt.Errorf("failed to unmarshal cached entries: %w", unmarshalErr)
+		return nil, newCacheError(
+			unmarshalErr,
+			"GetRefs",
+			fmt.Sprintf("failed to unmarshal cached refs for key %q", urlKey),
+		)
 	}
 	return refs, nil
 }
@@ -85,7 +121,11 @@ func (r *responseCache) GetRefs(urlKey string) (ResponseRefs, error) {
 func (r *responseCache) SetRefs(urlKey string, refs ResponseRefs) error {
 	data, err := json.Marshal(refs)
 	if err != nil {
-		return fmt.Errorf("failed to marshal headers: %w", err)
+		return newCacheError(
+			err,
+			"SetRefs",
+			fmt.Sprintf("failed to marshal refs for key %q", urlKey),
+		)
 	}
 	return r.cache.Set(urlKey, data)
 }
