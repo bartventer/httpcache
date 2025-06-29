@@ -102,18 +102,11 @@ func Test_makeVaryKey(t *testing.T) {
 		wantHash   func() string
 	}{
 		{
-			name:       "no vary headers (empty map)",
-			urlKey:     urlKey,
-			vary:       map[string]string{},
-			wantPrefix: urlKey,
-			wantHash:   func() string { return "" },
-		},
-		{
 			name:       "no vary headers (nil map)",
 			urlKey:     urlKey,
 			vary:       nil,
-			wantPrefix: urlKey,
-			wantHash:   func() string { return "" },
+			wantPrefix: urlKey + "#",
+			wantHash:   func() string { return noVaryHash },
 		},
 		{
 			name:       "single header",

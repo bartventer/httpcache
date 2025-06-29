@@ -324,9 +324,11 @@ func (f VaryKeyerFunc) VaryKey(urlKey string, varyHeaders map[string]string) str
 
 func NewVaryKeyer() VaryKeyer { return VaryKeyerFunc(makeVaryKey) }
 
+const noVaryHash = "0"
+
 func makeVaryKey(urlKey string, varyHeaders map[string]string) string {
 	if len(varyHeaders) == 0 {
-		return urlKey // No vary headers means no variation
+		return urlKey + "#" + noVaryHash // No Vary headers, so no variations
 	}
 	varyHash := makeVaryHash(varyHeaders)
 	return urlKey + "#" + strconv.FormatUint(varyHash, 10)
