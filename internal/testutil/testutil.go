@@ -61,7 +61,7 @@ func AssertEqual[T cmp.Ordered](t *testing.T, expected, actual T, msgAndArgs ...
 	return assert(
 		t,
 		got == 0,
-		"assertEqual failed: expected %v, got %v, %s",
+		"assertEqual failed: expected %q, got %q, %s",
 		expected,
 		actual,
 		msgAndArgs,
