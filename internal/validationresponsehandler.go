@@ -104,10 +104,6 @@ func (r *validationResponseHandler) HandleValidationResponse(
 	}
 
 	if err != nil {
-		r.l.LogCacheError(
-			"Validation error; cannot serve from cache",
-			err, req, ctx.URLKey, ctx.ToMisc(ccResp),
-		)
 		return nil, err
 	}
 
@@ -119,6 +115,7 @@ func (r *validationResponseHandler) HandleValidationResponse(
 		// RFC 9111 §4.3.3 Handling Validation Responses (full response)
 		// RFC 9111 §3.2 Storing Responses
 		_ = r.rs.StoreResponse(req, resp, ctx.URLKey, ctx.Refs, ctx.Start, ctx.End, ctx.RefIndex)
+		CacheStatusMiss.ApplyTo(resp.Header)
 		r.l.LogCacheMiss(req, ctx.URLKey, ctx.ToMisc(ccResp))
 	case IsUnsafeMethod(req.Method) && IsNonErrorStatus(resp.StatusCode):
 		// RFC 9111 §4.4 Invalidation of Cache Entries
