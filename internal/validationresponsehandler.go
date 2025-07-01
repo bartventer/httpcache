@@ -33,12 +33,26 @@ type RevalidationContext struct {
 	Start, End time.Time
 	CCReq      CCRequestDirectives
 	Stored     *Response
+	Freshness  *Freshness
 	Refs       ResponseRefs
 	RefIndex   int
-	Freshness  *Freshness
+}
+
+func (r RevalidationContext) ToMisc(ccResp CCResponseDirectives) MiscFunc {
+	return MiscFunc(func() Misc {
+		return Misc{
+			CCReq:     r.CCReq,
+			CCResp:    ccResp,
+			Stored:    r.Stored,
+			Freshness: r.Freshness,
+			Refs:      r.Refs,
+			RefIndex:  r.RefIndex,
+		}
+	})
 }
 
 type validationResponseHandler struct {
+	l     *Logger
 	clock Clock
 	ci    CacheInvalidator
 	ce    CacheabilityEvaluator
@@ -47,13 +61,14 @@ type validationResponseHandler struct {
 }
 
 func NewValidationResponseHandler(
+	dl *Logger,
 	clock Clock,
 	ci CacheInvalidator,
 	ce CacheabilityEvaluator,
 	siep StaleIfErrorPolicy,
 	rs ResponseStorer,
 ) *validationResponseHandler {
-	return &validationResponseHandler{clock, ci, ce, siep, rs}
+	return &validationResponseHandler{dl, clock, ci, ce, siep, rs}
 }
 
 func (r *validationResponseHandler) HandleValidationResponse(
@@ -62,46 +77,56 @@ func (r *validationResponseHandler) HandleValidationResponse(
 	resp *http.Response,
 	err error,
 ) (*http.Response, error) {
-	switch {
-	case err == nil && req.Method == http.MethodGet && resp.StatusCode == http.StatusNotModified:
+	if err == nil && req.Method == http.MethodGet && resp.StatusCode == http.StatusNotModified {
 		// RFC 9111 §4.3.3 Handling Validation Responses (304 Not Modified)
 		// RFC 9111 §4.3.4 Freshening Stored Responses upon Validation
 		updateStoredHeaders(ctx.Stored.Data, resp)
 		CacheStatusRevalidated.ApplyTo(ctx.Stored.Data.Header)
+		r.l.LogCacheRevalidated(req, ctx.URLKey, ctx.ToMisc(nil))
 		return ctx.Stored.Data, nil
-	case (err != nil || isStaleErrorAllowed(resp.StatusCode)) &&
-		req.Method == http.MethodGet &&
-		r.siep.CanStaleOnError(ctx.Freshness, ParseCCResponseDirectives(resp.Header)):
-		// RFC 9111 §4.2.4 Serving Stale Responses
-		// RFC 9111 §4.3.3 Handling Validation Responses (5xx errors)
-		SetAgeHeader(ctx.Stored.Data, r.clock, ctx.Freshness.Age)
-		CacheStatusStale.ApplyTo(ctx.Stored.Data.Header)
-		return ctx.Stored.Data, nil
-	default:
-		if err != nil {
-			return nil, err
+	}
+
+	var (
+		ccResp     CCResponseDirectives
+		ccRespOnce bool
+	)
+	if (err != nil || isStaleErrorAllowed(resp.StatusCode)) && req.Method == http.MethodGet {
+		ccResp = ParseCCResponseDirectives(resp.Header)
+		ccRespOnce = true
+		if r.siep.CanStaleOnError(ctx.Freshness, ccResp) {
+			// RFC 9111 §4.2.4 Serving Stale Responses
+			// RFC 9111 §4.3.3 Handling Validation Responses (5xx errors)
+			SetAgeHeader(ctx.Stored.Data, r.clock, ctx.Freshness.Age)
+			CacheStatusStale.ApplyTo(ctx.Stored.Data.Header)
+			r.l.LogCacheStaleIfError(req, ctx.URLKey, ctx.ToMisc(ccResp))
+			return ctx.Stored.Data, nil
 		}
+	}
+
+	if err != nil {
+		r.l.LogCacheError(
+			"Validation error; cannot serve from cache",
+			err, req, ctx.URLKey, ctx.ToMisc(ccResp),
+		)
+		return nil, err
+	}
+
+	if !ccRespOnce {
+		ccResp = ParseCCResponseDirectives(resp.Header)
+	}
+	switch {
+	case r.ce.CanStoreResponse(resp, ctx.CCReq, ccResp):
 		// RFC 9111 §4.3.3 Handling Validation Responses (full response)
 		// RFC 9111 §3.2 Storing Responses
-		ccResp := ParseCCResponseDirectives(resp.Header)
-		if r.ce.CanStoreResponse(resp, ctx.CCReq, ccResp) {
-			_ = r.rs.StoreResponse(
-				req,
-				resp,
-				ctx.URLKey,
-				ctx.Refs,
-				ctx.Start,
-				ctx.End,
-				ctx.RefIndex,
-			)
-			CacheStatusMiss.ApplyTo(resp.Header)
-		} else {
-			if IsUnsafeMethod(req) && IsNonErrorStatus(resp.StatusCode) {
-				// RFC 9111 §4.4 Invalidation of Cache Entries
-				r.ci.InvalidateCache(req.URL, resp.Header, ctx.Refs, ctx.URLKey)
-			}
-			CacheStatusBypass.ApplyTo(resp.Header)
-		}
-		return resp, nil
+		_ = r.rs.StoreResponse(req, resp, ctx.URLKey, ctx.Refs, ctx.Start, ctx.End, ctx.RefIndex)
+		r.l.LogCacheMiss(req, ctx.URLKey, ctx.ToMisc(ccResp))
+	case IsUnsafeMethod(req.Method) && IsNonErrorStatus(resp.StatusCode):
+		// RFC 9111 §4.4 Invalidation of Cache Entries
+		r.ci.InvalidateCache(req.URL, resp.Header, ctx.Refs, ctx.URLKey)
+		fallthrough
+	default:
+		CacheStatusBypass.ApplyTo(resp.Header)
+		r.l.LogCacheBypass("Bypass; serving upstream response", req, ctx.URLKey, ctx.ToMisc(ccResp))
 	}
+	return resp, nil
 }

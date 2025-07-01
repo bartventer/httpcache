@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"iter"
+	"log/slog"
 	"net/http"
 	"net/http/httputil"
 	"os"
@@ -34,6 +35,18 @@ type Response struct {
 	Data        *http.Response // the actual HTTP response data
 	RequestedAt time.Time      // time when the request was made used for determining cache freshness
 	ReceivedAt  time.Time      // time when the response was received, used for determining cache freshness
+}
+
+var _ slog.LogValuer = (*Response)(nil)
+
+func (r Response) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.String("id", r.ID),
+		slog.Time("requested_at", r.RequestedAt),
+		slog.Time("received_at", r.ReceivedAt),
+		slog.String("status", r.Data.Status),
+		slog.Int("status_code", r.Data.StatusCode),
+	)
 }
 
 // DateHeader returns the parsed value of the "Date" header from the response.
@@ -65,7 +78,7 @@ func (r *Response) ExpiresHeader() (t time.Time, found bool, valid bool) {
 	}
 	expires, err := parseHTTPDateCompat(expiresStr)
 	if err != nil || expires.IsZero() {
-		return time.Time{}, false, false
+		return
 	}
 	return expires, true, true
 }
@@ -136,6 +149,17 @@ type ResponseRef struct {
 	Vary         string            `json:"vary"`                 // value of the Vary response header.
 	VaryResolved map[string]string `json:"vary_resolved"`        // resolved varying request headers, keys are canonicalized.
 	ReceivedAt   time.Time         `json:"received_at,omitzero"` // when the response was generated.
+}
+
+var _ slog.LogValuer = (*ResponseRef)(nil)
+
+func (r ResponseRef) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.String("response_id", r.ResponseID),
+		slog.String("vary", r.Vary),
+		slog.Any("vary_resolved", r.VaryResolved),
+		slog.Time("received_at", r.ReceivedAt),
+	)
 }
 
 type ResponseRefs []*ResponseRef
