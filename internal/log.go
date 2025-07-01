@@ -34,10 +34,6 @@ func TraceIDFromContext(ctx context.Context) (string, bool) {
 	return traceID, ok
 }
 
-type TraceIDProvider interface {
-	TraceIDFromContext(ctx context.Context) (string, bool)
-}
-
 /*
 	+-------------------------------+
 	| Log Field Types   			|
