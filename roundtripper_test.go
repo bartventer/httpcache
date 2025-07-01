@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"testing"
 	"time"
 
@@ -35,8 +36,10 @@ func mockTransport(fields func(rt *transport)) *transport {
 		cache:      &internal.MockResponseCache{},
 		upstream:   http.DefaultTransport,
 		swrTimeout: DefaultSWRTimeout,
-		logger:     internal.NewLogger(slog.DiscardHandler),
-		ce:         internal.NewCacheabilityEvaluator(),
+		logger: internal.NewLogger(
+			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}),
+		),
+		ce: internal.NewCacheabilityEvaluator(),
 		rmc: &internal.MockRequestMethodChecker{
 			IsRequestMethodUnderstoodFunc: func(req *http.Request) bool { return true },
 		},
