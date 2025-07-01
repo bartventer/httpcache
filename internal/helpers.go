@@ -153,8 +153,8 @@ func validOptionalPort(port string) bool {
 	return true
 }
 
-func IsUnsafeMethod(req *http.Request) bool {
-	switch req.Method {
+func IsUnsafeMethod(method string) bool {
+	switch method {
 	case http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch:
 		return true
 	default:
