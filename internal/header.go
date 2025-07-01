@@ -15,6 +15,7 @@
 package internal
 
 import (
+	"log/slog"
 	"net/http"
 )
 
@@ -39,6 +40,15 @@ func (s CacheStatus) ApplyTo(header http.Header) {
 	if s.Legacy != "" {
 		header.Set(FromCacheHeader, s.Legacy)
 	}
+}
+
+var _ slog.LogValuer = (*CacheStatus)(nil)
+
+func (s CacheStatus) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.String("value", s.Value),
+		slog.Bool("from_cache", s.Legacy == FromCache),
+	)
 }
 
 const (

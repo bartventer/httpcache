@@ -16,6 +16,7 @@ package internal
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"testing"
@@ -25,6 +26,7 @@ import (
 )
 
 func Test_validationResponseHandler_HandleValidationResponse(t *testing.T) {
+	noopLogger := NewLogger(slog.DiscardHandler)
 	base := time.Unix(0, 0).UTC()
 	storedResp := &http.Response{
 		StatusCode: http.StatusOK,
@@ -58,8 +60,10 @@ func Test_validationResponseHandler_HandleValidationResponse(t *testing.T) {
 		assert  func(tt *testing.T, got *http.Response, err error)
 	}{
 		{
-			name:    "304 Not Modified",
-			handler: &validationResponseHandler{},
+			name: "304 Not Modified",
+			handler: &validationResponseHandler{
+				l: noopLogger,
+			},
 			setup: func(tt *testing.T, handler *validationResponseHandler) args {
 				return args{
 					req:  &http.Request{Method: http.MethodGet},
@@ -74,6 +78,7 @@ func Test_validationResponseHandler_HandleValidationResponse(t *testing.T) {
 		{
 			name: "GET with error status, stale allowed",
 			handler: &validationResponseHandler{
+				l: noopLogger,
 				siep: &MockStaleIfErrorPolicy{
 					CanStaleOnErrorFunc: func(*Freshness, ...StaleIfErrorer) bool { return true },
 				},
@@ -96,6 +101,7 @@ func Test_validationResponseHandler_HandleValidationResponse(t *testing.T) {
 		{
 			name: "GET with error, stale allowed",
 			handler: &validationResponseHandler{
+				l: noopLogger,
 				siep: &MockStaleIfErrorPolicy{
 					CanStaleOnErrorFunc: func(*Freshness, ...StaleIfErrorer) bool { return true },
 				},
@@ -119,6 +125,7 @@ func Test_validationResponseHandler_HandleValidationResponse(t *testing.T) {
 		{
 			name: "GET with error, stale not allowed",
 			handler: &validationResponseHandler{
+				l: noopLogger,
 				siep: &MockStaleIfErrorPolicy{
 					CanStaleOnErrorFunc: func(*Freshness, ...StaleIfErrorer) bool { return false },
 				},
@@ -140,8 +147,10 @@ func Test_validationResponseHandler_HandleValidationResponse(t *testing.T) {
 			},
 		},
 		{
-			name:    "Store response allowed",
-			handler: &validationResponseHandler{},
+			name: "Store response allowed",
+			handler: &validationResponseHandler{
+				l: noopLogger,
+			},
 			setup: func(tt *testing.T, handler *validationResponseHandler) args {
 				handler.rs = &MockResponseStorer{
 					StoreResponseFunc: func(req *http.Request, resp *http.Response, key string, headers ResponseRefs, reqTime, respTime time.Time, refIndex int) error {
@@ -164,8 +173,10 @@ func Test_validationResponseHandler_HandleValidationResponse(t *testing.T) {
 			},
 		},
 		{
-			name:    "Store response not allowed",
-			handler: &validationResponseHandler{},
+			name: "Store response not allowed",
+			handler: &validationResponseHandler{
+				l: noopLogger,
+			},
 			setup: func(tt *testing.T, handler *validationResponseHandler) args {
 				handler.ci = &MockCacheInvalidator{
 					InvalidateCacheFunc: func(reqURL *url.URL, respHeader http.Header, headers ResponseRefs, key string) {

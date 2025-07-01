@@ -25,6 +25,7 @@ linters:
     - gosec
     - govet
     - ineffassign
+    - iface
     - loggercheck
     - makezero
     - mirror
@@ -178,6 +179,14 @@ linters:
     rowserrcheck:
       packages:
         - github.com/jmoiron/sqlx
+    sloglint:
+      static-msg: true
+      attr-only: true
+      args-on-sep-lines: true
+      no-global: all
+      context: all
+      msg-style: capitalized
+      key-naming-case: snake
     staticcheck:
       checks:
         - -ST1003

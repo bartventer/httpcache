@@ -50,11 +50,9 @@ import (
 	"cmp"
 	"context"
 	"errors"
-	"fmt"
 	"iter"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/bartventer/httpcache/internal"
@@ -62,46 +60,11 @@ import (
 	"github.com/bartventer/httpcache/store/driver"
 )
 
-const CacheStatusHeader = internal.CacheStatusHeader
+const (
+	DefaultSWRTimeout = 5 * time.Second
 
-type Option interface {
-	apply(*transport)
-}
-
-type optionFunc func(*transport)
-
-func (f optionFunc) apply(r *transport) {
-	f(r)
-}
-
-// WithUpstream sets the underlying [http.RoundTripper] used for upstream/origin
-// requests. Default: [http.DefaultTransport].
-//
-// Note: Headers added by the upstream roundtripper (e.g., authentication
-// headers) do not affect cache key calculation or Vary header matching
-// (RFC 9111 §4.1). The cache operates on the original client request, not the
-// mutated request seen by the upstream roundtripper.
-func WithUpstream(upstream http.RoundTripper) Option {
-	return optionFunc(func(r *transport) {
-		r.upstream = upstream
-	})
-}
-
-// WithSWRTimeout sets the timeout for Stale-While-Revalidate requests;
-// default: [DefaultSWRTimeout].
-func WithSWRTimeout(timeout time.Duration) Option {
-	return optionFunc(func(r *transport) {
-		r.swrTimeout = timeout
-	})
-}
-
-// WithLogger sets the logger for debug output; default:
-// [slog.New]([slog.DiscardHandler]).
-func WithLogger(logger *slog.Logger) Option {
-	return optionFunc(func(r *transport) {
-		r.logger = logger
-	})
-}
+	CacheStatusHeader = internal.CacheStatusHeader
+)
 
 // transport is an implementation of [http.RoundTripper] that caches HTTP responses
 // according to the HTTP caching rules defined in RFC 9111.
@@ -111,7 +74,7 @@ type transport struct {
 	cache      internal.ResponseCache // Cache for storing and retrieving responses
 	upstream   http.RoundTripper      // Underlying round tripper for upstream/origin requests
 	swrTimeout time.Duration          // Timeout for Stale-While-Revalidate requests
-	logger     *slog.Logger           // Logger for debug output, if needed
+	logger     *internal.Logger       // Logger for debug output, if needed
 
 	// Internal details
 
@@ -126,8 +89,6 @@ type transport struct {
 	vrh   internal.ValidationResponseHandler // Processes validation responses for revalidation
 	clock internal.Clock                     // Provides time-related operations, can be mocked for testing
 }
-
-const DefaultSWRTimeout = 5 * time.Second // Default timeout for Stale-While-Revalidate
 
 // ErrOpenCache is used as the panic value when the cache cannot be opened.
 // You may recover from this panic if you wish to handle the situation gracefully.
@@ -178,6 +139,14 @@ func newTransport(conn driver.Conn, options ...Option) http.RoundTripper {
 		ce:    internal.NewCacheabilityEvaluator(),
 		clock: internal.NewClock(),
 	}
+
+	for _, opt := range options {
+		opt.apply(rt)
+	}
+	rt.upstream = cmp.Or(rt.upstream, http.DefaultTransport)
+	rt.swrTimeout = cmp.Or(max(rt.swrTimeout, 0), DefaultSWRTimeout)
+	rt.logger = cmp.Or(rt.logger, internal.NewLogger(slog.DiscardHandler))
+
 	rt.fc = internal.NewFreshnessCalculator(rt.clock)
 	rt.ci = internal.NewCacheInvalidator(rt.cache, rt.uk)
 	rt.siep = internal.NewStaleIfErrorPolicy(rt.clock)
@@ -186,14 +155,14 @@ func newTransport(conn driver.Conn, options ...Option) http.RoundTripper {
 		internal.NewVaryHeaderNormalizer(),
 		internal.NewVaryKeyer(),
 	)
-	rt.vrh = internal.NewValidationResponseHandler(rt.clock, rt.ci, rt.ce, rt.siep, rt.rs)
-
-	for _, opt := range options {
-		opt.apply(rt)
-	}
-	rt.upstream = cmp.Or(rt.upstream, http.DefaultTransport)
-	rt.swrTimeout = cmp.Or(max(rt.swrTimeout, 0), DefaultSWRTimeout)
-	rt.logger = cmp.Or(rt.logger, slog.New(slog.DiscardHandler))
+	rt.vrh = internal.NewValidationResponseHandler(
+		rt.logger,
+		rt.clock,
+		rt.ci,
+		rt.ce,
+		rt.siep,
+		rt.rs,
+	)
 	return rt
 }
 
@@ -223,17 +192,15 @@ func (r *transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	entry, err := r.cache.Get(refs[refIndex].ResponseID, req)
-	if err != nil || entry == nil {
-		r.logger.Warn(
-			"Cache entry missing or unreadable. Possible corruption or eviction.",
-			slog.String("url", req.URL.String()),
-			slog.String("method", req.Method),
-			slog.String("drivers", strings.Join(store.Drivers(), ", ")),
-			slog.String("cache_key", urlKey),
-			slog.Int("ref_index", refIndex),
-			slog.String("vary", refs[refIndex].Vary),
-			slog.String("response_id", refs[refIndex].ResponseID),
-			slog.Any("error", err),
+	if err != nil {
+		r.logger.LogCacheError(
+			"Error retrieving cache entry; possible corruption.",
+			err,
+			req,
+			urlKey,
+			internal.MiscFunc(func() internal.Misc {
+				return internal.Misc{Refs: refs, RefIndex: refIndex}
+			}),
 		)
 		return r.handleCacheMiss(req, urlKey, refs, refIndex)
 	}
@@ -245,7 +212,7 @@ func (r *transport) handleUnrecognizedMethod(
 	req *http.Request,
 	urlKey string,
 ) (*http.Response, error) {
-	if !internal.IsUnsafeMethod(req) {
+	if !internal.IsUnsafeMethod(req.Method) {
 		resp, err := r.upstream.RoundTrip(req)
 		if err != nil {
 			return nil, err
@@ -262,6 +229,7 @@ func (r *transport) handleUnrecognizedMethod(
 		r.ci.InvalidateCache(req.URL, resp.Header, refs, urlKey)
 	}
 	internal.CacheStatusBypass.ApplyTo(resp.Header)
+	r.logger.LogCacheBypass("Bypass; unrecognized method, served from upstream.", req, urlKey, nil)
 	return resp, nil
 }
 
@@ -284,6 +252,14 @@ func (r *transport) handleCacheMiss(
 		_ = r.rs.StoreResponse(req, resp, urlKey, refs, start, end, refIndex)
 	}
 	internal.CacheStatusMiss.ApplyTo(resp.Header)
+	r.logger.LogCacheMiss(req, urlKey, internal.MiscFunc(func() internal.Misc {
+		return internal.Misc{
+			CCReq:    ccReq,
+			CCResp:   ccResp,
+			Refs:     refs,
+			RefIndex: refIndex,
+		}
+	}))
 	return resp, nil
 }
 
@@ -302,7 +278,14 @@ func (r *transport) handleCacheHit(
 
 	// RFC 8246: If response is fresh and immutable, always serve from cache unless request has no-cache
 	if !freshness.IsStale && ccResp.Immutable() && !ccReq.NoCache() {
-		return r.serveFromCache(stored, freshness, isRespNoCacheQualified, respNoCacheFieldsSeq)
+		return r.serveFromCache(
+			req,
+			urlKey,
+			stored,
+			freshness,
+			isRespNoCacheQualified,
+			respNoCacheFieldsSeq,
+		)
 	}
 
 	if (freshness.IsStale && ccResp.MustRevalidate()) ||
@@ -311,7 +294,14 @@ func (r *transport) handleCacheHit(
 	}
 
 	if ccReq.OnlyIfCached() || (!freshness.IsStale && !ccReq.NoCache()) {
-		return r.serveFromCache(stored, freshness, isRespNoCacheQualified, respNoCacheFieldsSeq)
+		return r.serveFromCache(
+			req,
+			urlKey,
+			stored,
+			freshness,
+			isRespNoCacheQualified,
+			respNoCacheFieldsSeq,
+		)
 	}
 
 	if swr, swrValid := ccResp.StaleWhileRevalidate(); freshness.IsStale && swrValid {
@@ -339,6 +329,8 @@ revalidate:
 }
 
 func (r *transport) serveFromCache(
+	req *http.Request,
+	urlKey string,
 	stored *internal.Response,
 	freshness *internal.Freshness,
 	noCacheQualified bool,
@@ -352,6 +344,12 @@ func (r *transport) serveFromCache(
 	}
 	internal.SetAgeHeader(stored.Data, r.clock, freshness.Age)
 	internal.CacheStatusHit.ApplyTo(stored.Data.Header)
+	r.logger.LogCacheHit(req, urlKey, internal.MiscFunc(func() internal.Misc {
+		return internal.Misc{
+			Stored:    stored,
+			Freshness: freshness,
+		}
+	}))
 	return stored.Data, nil
 }
 
@@ -372,34 +370,35 @@ func (r *transport) handleStaleWhileRevalidate(
 	//
 	// Open a discussion at github.com/bartventer/httpcache/issues if your use case requires
 	// guaranteed completion.
-	go r.performBackgroundRevalidation(req2, stored, urlKey, freshness, ccReq)
+	go r.backgroundRevalidate(req2, stored, urlKey, freshness, ccReq)
 	internal.CacheStatusStale.ApplyTo(stored.Data.Header)
+	r.logger.LogCacheStaleRevalidate(req, urlKey, internal.MiscFunc(func() internal.Misc {
+		return internal.Misc{
+			CCReq:     ccReq,
+			Stored:    stored,
+			Freshness: freshness,
+		}
+	}))
 	return stored.Data, nil
 }
 
-func (r *transport) performBackgroundRevalidation(
+func (r *transport) backgroundRevalidate(
 	req *http.Request,
 	stored *internal.Response,
 	urlKey string,
 	freshness *internal.Freshness,
 	ccReq internal.CCRequestDirectives,
 ) {
-	sl := r.logger.With(
-		slog.String("method", req.Method),
-		slog.String("url", req.URL.String()),
-		slog.String("urlKey", urlKey),
-	)
 	ctx, cancel := context.WithTimeout(req.Context(), r.swrTimeout)
 	defer cancel()
 	req = req.WithContext(ctx)
 	errc := make(chan error, 1)
 	go func() {
 		defer close(errc)
-		sl.Debug("SWR background revalidation started")
 		//nolint:bodyclose // The response is not used, so we don't need to close it.
 		resp, start, end, err := r.roundTripTimed(req)
 		if err != nil {
-			errc <- fmt.Errorf("background revalidation failed: %w", err)
+			errc <- err
 			return
 		}
 		select {
@@ -423,13 +422,7 @@ func (r *transport) performBackgroundRevalidation(
 
 	select {
 	case <-ctx.Done():
-		sl.Debug("SWR background revalidation timeout")
-	case swrErr := <-errc:
-		if swrErr != nil {
-			sl.Error("SWR background revalidation error", slog.Any("error", swrErr))
-		} else {
-			sl.Debug("SWR background revalidation done")
-		}
+	case <-errc:
 	}
 }
 

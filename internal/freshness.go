@@ -15,6 +15,8 @@
 package internal
 
 import (
+	"cmp"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -25,10 +27,29 @@ type Age struct {
 	Timestamp time.Time     // Time when the age was calculated
 }
 
+var _ slog.LogValuer = (*Age)(nil)
+
+func (a Age) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.Duration("value", a.Value),
+		slog.Time("timestamp", a.Timestamp),
+	)
+}
+
 type Freshness struct {
 	IsStale    bool          // Whether the response is stale
 	Age        *Age          // Current age (seconds) of the response (RFC9111 §4.2.3)
 	UsefulLife time.Duration // Freshness lifetime (seconds) of the response (RFC9111 §4.2.1)
+}
+
+var _ slog.LogValuer = (*Freshness)(nil)
+
+func (f Freshness) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.Bool("is_stale", f.IsStale),
+		slog.Any("age", cmp.Or(f.Age, &Age{Value: 0, Timestamp: time.Time{}})),
+		slog.Duration("useful_life", f.UsefulLife),
+	)
 }
 
 // heuristicFreshness calculates freshness lifetime using heuristics (10% of (date - last-modified)),

@@ -35,7 +35,8 @@ func mockTransport(fields func(rt *transport)) *transport {
 		cache:      &internal.MockResponseCache{},
 		upstream:   http.DefaultTransport,
 		swrTimeout: DefaultSWRTimeout,
-		logger:     slog.New(slog.DiscardHandler),
+		logger:     internal.NewLogger(slog.DiscardHandler),
+		ce:         internal.NewCacheabilityEvaluator(),
 		rmc: &internal.MockRequestMethodChecker{
 			IsRequestMethodUnderstoodFunc: func(req *http.Request) bool { return true },
 		},
@@ -71,6 +72,8 @@ func mockTransport(fields func(rt *transport)) *transport {
 	}
 	return rt
 }
+
+var FakeResponseRef = &internal.ResponseRef{}
 
 func assertCacheStatus(t *testing.T, resp *http.Response, expectedStatus internal.CacheStatus) {
 	t.Helper()
@@ -135,7 +138,7 @@ func Test_transport_CacheHit(t *testing.T) {
 	}
 	mockRespCache := &internal.MockResponseCache{
 		GetRefsFunc: func(key string) (internal.ResponseRefs, error) {
-			return internal.ResponseRefs{{}}, nil
+			return internal.ResponseRefs{FakeResponseRef}, nil
 		},
 		GetFunc:    func(key string, req *http.Request) (*internal.Response, error) { return storedEntry, nil },
 		SetFunc:    func(key string, entry *internal.Response) error { return nil },
@@ -170,7 +173,7 @@ func Test_transport_CacheHit_Immutable(t *testing.T) {
 		rt.cache = &internal.MockResponseCache{
 			GetFunc: func(key string, req *http.Request) (*internal.Response, error) { return storedEntry, nil },
 			GetRefsFunc: func(key string) (internal.ResponseRefs, error) {
-				return internal.ResponseRefs{{}}, nil
+				return internal.ResponseRefs{FakeResponseRef}, nil
 			},
 		}
 		rt.fc = &internal.MockFreshnessCalculator{
@@ -209,7 +212,7 @@ func Test_transport_CacheHit_MustRevalidate_Stale(t *testing.T) {
 		rt.cache = &internal.MockResponseCache{
 			GetFunc: func(key string, req *http.Request) (*internal.Response, error) { return storedEntry, nil },
 			GetRefsFunc: func(key string) (internal.ResponseRefs, error) {
-				return internal.ResponseRefs{{}}, nil
+				return internal.ResponseRefs{FakeResponseRef}, nil
 			},
 		}
 		rt.fc = &internal.MockFreshnessCalculator{
@@ -249,7 +252,7 @@ func Test_transport_CacheHit_NoCacheUnqualified(t *testing.T) {
 		rt.cache = &internal.MockResponseCache{
 			GetFunc: func(key string, req *http.Request) (*internal.Response, error) { return storedEntry, nil },
 			GetRefsFunc: func(key string) (internal.ResponseRefs, error) {
-				return internal.ResponseRefs{{}}, nil
+				return internal.ResponseRefs{FakeResponseRef}, nil
 			},
 		}
 		rt.vrh = &internal.MockValidationResponseHandler{
@@ -287,7 +290,7 @@ func Test_transport_CacheHit_NoCacheQualified_StripsFields(t *testing.T) {
 		rt.cache = &internal.MockResponseCache{
 			GetFunc: func(key string, req *http.Request) (*internal.Response, error) { return storedEntry, nil },
 			GetRefsFunc: func(key string) (internal.ResponseRefs, error) {
-				return internal.ResponseRefs{{}}, nil
+				return internal.ResponseRefs{FakeResponseRef}, nil
 			},
 		}
 	})
@@ -384,7 +387,7 @@ func Test_transport_NonErrorStatusInvalidation(t *testing.T) {
 	rt := mockTransport(func(rt *transport) {
 		rt.cache = &internal.MockResponseCache{
 			GetRefsFunc: func(key string) (internal.ResponseRefs, error) {
-				return internal.ResponseRefs{{}}, nil
+				return internal.ResponseRefs{FakeResponseRef}, nil
 			},
 		}
 		rt.rmc = &internal.MockRequestMethodChecker{
@@ -440,7 +443,7 @@ func Test_transport_OnlyIfCached504(t *testing.T) {
 				return nil, errors.New("cache miss")
 			},
 			GetRefsFunc: func(key string) (internal.ResponseRefs, error) {
-				return internal.ResponseRefs{{}}, nil
+				return internal.ResponseRefs{FakeResponseRef}, nil
 			},
 		}
 		rt.vm = &internal.MockVaryMatcher{
@@ -464,7 +467,7 @@ func Test_transport_CacheMissWithError(t *testing.T) {
 				return nil, errors.New("cache miss")
 			},
 			GetRefsFunc: func(key string) (internal.ResponseRefs, error) {
-				return internal.ResponseRefs{{}}, nil
+				return internal.ResponseRefs{FakeResponseRef}, nil
 			},
 		}
 		rt.vm = &internal.MockVaryMatcher{
@@ -501,7 +504,7 @@ func Test_transport_RevalidationPath(t *testing.T) {
 		rt.cache = &internal.MockResponseCache{
 			GetFunc: func(key string, req *http.Request) (*internal.Response, error) { return storedEntry, nil },
 			GetRefsFunc: func(key string) (internal.ResponseRefs, error) {
-				return internal.ResponseRefs{{}}, nil
+				return internal.ResponseRefs{FakeResponseRef}, nil
 			},
 		}
 		rt.vm = &internal.MockVaryMatcher{
@@ -567,7 +570,7 @@ func Test_transport_SWR_NormalPath(t *testing.T) {
 		rt.cache = &internal.MockResponseCache{
 			GetFunc: func(key string, req *http.Request) (*internal.Response, error) { return storedEntry, nil },
 			GetRefsFunc: func(key string) (internal.ResponseRefs, error) {
-				return internal.ResponseRefs{{}}, nil
+				return internal.ResponseRefs{FakeResponseRef}, nil
 			},
 		}
 		rt.vm = &internal.MockVaryMatcher{
@@ -640,7 +643,7 @@ func Test_transport_SWR_NormalPathAndError(t *testing.T) {
 		rt.cache = &internal.MockResponseCache{
 			GetFunc: func(key string, req *http.Request) (*internal.Response, error) { return storedEntry, nil },
 			GetRefsFunc: func(key string) (internal.ResponseRefs, error) {
-				return internal.ResponseRefs{{}}, nil
+				return internal.ResponseRefs{FakeResponseRef}, nil
 			},
 		}
 		rt.vm = &internal.MockVaryMatcher{
@@ -707,7 +710,7 @@ func Test_transport_SWR_Timeout(t *testing.T) {
 		rt.cache = &internal.MockResponseCache{
 			GetFunc: func(key string, req *http.Request) (*internal.Response, error) { return storedEntry, nil },
 			GetRefsFunc: func(key string) (internal.ResponseRefs, error) {
-				return internal.ResponseRefs{{}}, nil
+				return internal.ResponseRefs{FakeResponseRef}, nil
 			},
 		}
 		rt.vm = &internal.MockVaryMatcher{
@@ -772,7 +775,6 @@ func Test_newTransport(t *testing.T) {
 	)
 	testutil.RequireNotNil(t, rt)
 	testutil.AssertTrue(t, mockTransport == rt.(*transport).upstream)
-	testutil.AssertTrue(t, l == rt.(*transport).logger)
 	testutil.AssertEqual(t, swrTimeout, rt.(*transport).swrTimeout)
 }
 

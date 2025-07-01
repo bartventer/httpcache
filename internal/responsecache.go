@@ -56,7 +56,7 @@ type CacheError struct {
 func (c *CacheError) Error() string { return fmt.Sprintf("%s: %s: %v", c.Op, c.Message, c.Err) }
 func (c *CacheError) Unwrap() error { return c.Err }
 
-func (c *CacheError) LogValue() slog.Value {
+func (c CacheError) LogValue() slog.Value {
 	return slog.GroupValue(
 		slog.String("op", c.Op),
 		slog.String("message", c.Message),
