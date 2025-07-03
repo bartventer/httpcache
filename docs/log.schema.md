@@ -16,6 +16,7 @@ This document describes the structured log schema, in JSON format, used by the H
 | misc      | object | Additional context (optional, see [below](#misc-object-optional)) |
 
 ## `request` object
+
 | Field  | Type   | Description      |
 | ------ | ------ | ---------------- |
 | method | string | HTTP method      |
@@ -23,35 +24,39 @@ This document describes the structured log schema, in JSON format, used by the H
 | host   | string | Host header      |
 
 ## `cache` object
+
 | Field   | Type   | Description         |
 | ------- | ------ | ------------------- |
 | status  | string | HIT, MISS, STALE... |
 | url_key | string | Cache key           |
 
 ## `misc` object (optional)
-| Field       | Type   | Description                                                    |
-| ----------- | ------ | -------------------------------------------------------------- |
-| cc_request  | object | Cache-Control request directives (if present)                  |
-| cc_response | object | Cache-Control response directives (if present)                 |
-| stored      | object | Cached response details (if present)                           |
-| freshness   | object | Freshness details (if present, see [below](#freshness-object)) |
-| ref         | object | Reference details (if present)                                 |
+
+| Field       | Type   | Description                                                             |
+| ----------- | ------ | ----------------------------------------------------------------------- |
+| cc_request  | object | Cache-Control request directives (if present)                           |
+| cc_response | object | Cache-Control response directives (if present)                          |
+| stored      | object | Cached response details (if present)                                    |
+| freshness   | object | Freshness details (if present, see [below](#freshness-object-optional)) |
+| ref         | object | Reference details (if present)                                          |
 
 ## `freshness` object (optional)
-| Field     | Type    | Description                                           |
-| --------- | ------- | ----------------------------------------------------- |
-| is_stale  | boolean | Whether the response is stale                         |
-| age       | object  | Age of the cached response (see [below](#age-object)) |
-| timestamp | string  | Timestamp of the age calculation (ISO8601)            |
+
+| Field     | Type    | Description                                                    |
+| --------- | ------- | -------------------------------------------------------------- |
+| is_stale  | boolean | Whether the response is stale                                  |
+| age       | object  | Age of the cached response (see [below](#age-object-optional)) |
+| timestamp | string  | Timestamp of the age calculation (ISO8601)                     |
 
 ## `age` object (optional)
+
 | Field     | Type   | Description                                |
 | --------- | ------ | ------------------------------------------ |
 | value     | number | Age in seconds                             |
 | timestamp | string | Timestamp of the age calculation (ISO8601) |
 
-
 ### Example
+
 ```json
 {
   "timestamp": "2025-07-01T14:20:00.000Z",
@@ -79,5 +84,6 @@ This document describes the structured log schema, in JSON format, used by the H
         "timestamp":"2025-07-01T14:35:19.298742743Z"
       },
     }
+  }
 }
 ```
