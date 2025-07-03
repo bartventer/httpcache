@@ -57,6 +57,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -174,11 +175,11 @@ func WithBaseDir(base string) Option {
 }
 
 func fromURL(u *url.URL) (*fsCache, error) {
-	opts := make([]Option, 0, 4)
-	var appname string
-	if appname = u.Query().Get("appname"); appname == "" {
+	appname := u.Query().Get("appname")
+	if appname == "" {
 		return nil, ErrMissingAppName
 	}
+	opts := make([]Option, 0, 4)
 	if u.Path != "" && u.Path != "/" {
 		opts = append(opts, WithBaseDir(u.Path))
 	}
@@ -191,6 +192,9 @@ func fromURL(u *url.URL) (*fsCache, error) {
 	if encrypt := u.Query().Get("encrypt"); encrypt == "on" || encrypt == "aesgcm" {
 		key := cmp.Or(u.Query().Get("encrypt_key"), os.Getenv("FSCACHE_ENCRYPT_KEY"))
 		opts = append(opts, WithEncryption(key))
+	}
+	if cap(opts) > len(opts) {
+		opts = slices.Clip(opts)
 	}
 	return Open(appname, opts...)
 }
@@ -451,6 +455,9 @@ func (c *fsCache) keys(prefix string) ([]string, error) {
 	})
 	if err != nil {
 		return nil, err
+	}
+	if cap(keys) > len(keys) {
+		keys = slices.Clip(keys)
 	}
 	return keys, nil
 }
