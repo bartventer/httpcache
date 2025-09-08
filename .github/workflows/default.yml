@@ -29,7 +29,7 @@ jobs:
 
       - name: Upload coverage reports to Codecov
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
-        uses: codecov/codecov-action@0565863a31f2c772f9f0395002a31e3f06189574 # v5.4.0
+        uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ${{ env.OUTPUTDIR }}/${{ env.COVERPROFILE }}
