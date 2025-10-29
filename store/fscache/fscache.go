@@ -350,7 +350,11 @@ func (c *fsCache) set(key string, entry []byte) error {
 			return err
 		}
 	}
-	f, err := c.root.Create(c.fn.FileName(key))
+	name := c.fn.FileName(key)
+	if err := c.root.MkdirAll(filepath.Dir(name), 0o755); err != nil {
+		return err
+	}
+	f, err := c.root.Create(name)
 	if err != nil {
 		return err
 	}
