@@ -50,6 +50,7 @@ import (
 	"context"
 	"crypto/rand"
 	"io/fs"
+	"strings"
 
 	"errors"
 	"fmt"
@@ -59,7 +60,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/bartventer/httpcache/store"
@@ -436,7 +436,9 @@ func (c *fsCache) keys(prefix string) ([]string, error) {
 		if d.IsDir() {
 			return nil
 		}
-		key, err := c.fnk.KeyFromFileName(filepath.Base(path))
+		key, err := c.fnk.KeyFromFileName(
+			strings.TrimPrefix(path, dirname+string(os.PathSeparator)),
+		)
 		if err != nil {
 			return err
 		}
