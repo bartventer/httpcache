@@ -18,6 +18,7 @@ package acceptance
 import (
 	"bytes"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/bartventer/httpcache/internal/testutil"
@@ -126,7 +127,11 @@ func testKeys(t *testing.T, factory FactoryFunc) {
 	if !ok {
 		t.Skip("Cache implementation does not support key listing")
 	}
-	keys := []string{"foo", "bar", "baz"}
+	keys := []string{
+		"foo",
+		"bar",
+		"baz" + strings.Repeat("x", 255), // ensure long key handling
+	}
 	for _, key := range keys {
 		value := []byte("value for " + key)
 		testutil.RequireNoError(t, cache.Set(key, value), "Set failed for key "+key)
