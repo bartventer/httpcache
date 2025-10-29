@@ -71,8 +71,8 @@ func Test_fsCache_KeysError(t *testing.T) {
 	cache.fn = fileNamerFunc(func(key string) string {
 		return key
 	})
-	cache.fnk = fileNameKeyerFunc(func(name string) string {
-		return name
+	cache.fnk = fileNameKeyerFunc(func(name string) (string, error) {
+		return name, nil
 	})
 	cache.dw = dirWalkerFunc(func(root string, fn fs.WalkDirFunc) error {
 		return testutil.ErrSample
