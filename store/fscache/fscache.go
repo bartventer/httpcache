@@ -49,11 +49,12 @@ import (
 	"cmp"
 	"context"
 	"crypto/rand"
-	"encoding/base64"
+	"io/fs"
+
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
+
 	"net/url"
 	"os"
 	"path/filepath"
@@ -110,7 +111,7 @@ type fsCache struct {
 	// internal components
 
 	fn  fileNamer     // generates file names from keys
-	fnk fileNameKeyer // extracts keys from file names
+	fnk fileNameKeyer // recovers keys from file names
 	dw  dirWalker     // used for directory walking
 }
 
@@ -251,38 +252,21 @@ func (c *fsCache) initialize(appname string) error {
 	if err != nil {
 		return fmt.Errorf("fscache: could not open cache directory %q: %w", c.base, err)
 	}
-	c.fn = fileNamerFunc(safeFileName)
-	c.fnk = fileNameKeyerFunc(keyFromFileName)
+	c.fn = fragmentingFileNamer()
+	c.fnk = fragmentingFileNameKeyer()
 	c.dw = dirWalkerFunc(filepath.WalkDir)
 	c.timeout = cmp.Or(c.timeout, defaultTimeout)
 
 	return nil
 }
 
-type (
-	fileNamer     interface{ FileName(key string) string }
-	fileNameKeyer interface{ KeyFromFileName(name string) string }
-	dirWalker     interface {
-		WalkDir(root string, fn fs.WalkDirFunc) error
-	}
-)
-
-type (
-	fileNamerFunc     func(key string) string
-	fileNameKeyerFunc func(name string) string
-	dirWalkerFunc     func(root string, fn fs.WalkDirFunc) error
-)
-
-func (f fileNamerFunc) FileName(key string) string                   { return f(key) }
-func (f fileNameKeyerFunc) KeyFromFileName(name string) string       { return f(name) }
-func (f dirWalkerFunc) WalkDir(root string, fn fs.WalkDirFunc) error { return f(root, fn) }
-
-func safeFileName(key string) string { return base64.RawURLEncoding.EncodeToString([]byte(key)) }
-
-func keyFromFileName(name string) string {
-	data, _ := base64.RawURLEncoding.DecodeString(name)
-	return string(data)
+type dirWalker interface {
+	WalkDir(root string, fn fs.WalkDirFunc) error
 }
+
+type dirWalkerFunc func(root string, fn fs.WalkDirFunc) error
+
+func (f dirWalkerFunc) WalkDir(root string, fn fs.WalkDirFunc) error { return f(root, fn) }
 
 var _ driver.Conn = (*fsCache)(nil)
 var _ expapi.KeyLister = (*fsCache)(nil)
@@ -448,7 +432,11 @@ func (c *fsCache) keys(prefix string) ([]string, error) {
 		if d.IsDir() {
 			return nil
 		}
-		if key := c.fnk.KeyFromFileName(filepath.Base(path)); strings.HasPrefix(key, prefix) {
+		key, err := c.fnk.KeyFromFileName(filepath.Base(path))
+		if err != nil {
+			return err
+		}
+		if strings.HasPrefix(key, prefix) {
 			keys = append(keys, key)
 		}
 		return nil
