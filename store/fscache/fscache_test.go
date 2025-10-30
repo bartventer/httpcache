@@ -20,6 +20,8 @@ import (
 	"io"
 	"io/fs"
 	"net/url"
+	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -30,9 +32,10 @@ import (
 
 func (c *fsCache) Close() error { return c.root.Close() }
 
-func makeRoot(t testing.TB) *url.URL {
+func makeRootURL(t testing.TB) *url.URL {
 	t.Helper()
-	u, err := url.Parse("fscache://" + t.TempDir() + "?appname=testapp")
+	tempDir := filepath.ToSlash(t.TempDir())
+	u, err := url.Parse("fscache://" + tempDir + "?appname=testapp")
 	if err != nil {
 		t.Fatalf("Failed to parse cache URL: %v", err)
 	}
@@ -41,7 +44,7 @@ func makeRoot(t testing.TB) *url.URL {
 
 func TestFSCache_Acceptance(t *testing.T) {
 	acceptance.Run(t, acceptance.FactoryFunc(func() (driver.Conn, func()) {
-		u := makeRoot(t)
+		u := makeRootURL(t)
 		cache, err := fromURL(u)
 		testutil.RequireNoError(t, err, "Failed to create fscache")
 		cleanup := func() { cache.Close() }
@@ -50,7 +53,7 @@ func TestFSCache_Acceptance(t *testing.T) {
 }
 
 func Test_fsCache_SetError(t *testing.T) {
-	u := makeRoot(t)
+	u := makeRootURL(t)
 	cache, err := fromURL(u)
 	testutil.RequireNoError(t, err, "Failed to create fscache")
 	t.Cleanup(func() { cache.Close() })
@@ -63,7 +66,7 @@ func Test_fsCache_SetError(t *testing.T) {
 }
 
 func Test_fsCache_KeysError(t *testing.T) {
-	u := makeRoot(t)
+	u := makeRootURL(t)
 	cache, err := fromURL(u)
 	testutil.RequireNoError(t, err, "Failed to create fscache")
 	t.Cleanup(func() { cache.Close() })
@@ -96,7 +99,7 @@ func TestOpen(t *testing.T) {
 		{
 			name: "Valid Root Directory",
 			args: args{
-				dsn: "fscache://" + t.TempDir() + "?appname=myapp",
+				dsn: "fscache://" + filepath.ToSlash(t.TempDir()) + "?appname=myapp",
 			},
 			assertion: func(tt *testing.T, got *fsCache, err error) {
 				testutil.RequireNoError(tt, err)
@@ -119,8 +122,13 @@ func TestOpen(t *testing.T) {
 				dsn: "fscache://?appname=myapp",
 			},
 			setup: func(tt *testing.T) {
-				tt.Setenv("XDG_CACHE_HOME", "")
-				tt.Setenv("HOME", "")
+				switch runtime.GOOS {
+				case "windows":
+					tt.Setenv("LocalAppData", "")
+				default:
+					tt.Setenv("XDG_CACHE_HOME", "")
+					tt.Setenv("HOME", "")
+				}
 			},
 			assertion: func(tt *testing.T, got *fsCache, err error) {
 				testutil.RequireErrorIs(tt, err, ErrUserCacheDir)
@@ -140,7 +148,9 @@ func TestOpen(t *testing.T) {
 		{
 			name: "Invalid Root Directory",
 			args: args{
-				dsn: "fscache:///../invalid?appname=myapp",
+				dsn: "fscache://" + filepath.ToSlash(
+					filepath.VolumeName(t.TempDir())+"/../invalid",
+				) + "?appname=myapp",
 			},
 			assertion: func(tt *testing.T, got *fsCache, err error) {
 				testutil.RequireErrorIs(tt, err, ErrCreateCacheDir)
@@ -202,6 +212,7 @@ func TestOpen(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to parse URL: %v", err)
 			}
+			t.Attr("URL", u.String())
 			if tt.setup != nil {
 				tt.setup(t)
 			}

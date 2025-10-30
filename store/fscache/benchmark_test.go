@@ -12,7 +12,7 @@ import (
 
 func BenchmarkFSCache(b *testing.B) {
 	acceptance.RunB(b, acceptance.FactoryFunc(func() (driver.Conn, func()) {
-		u := makeRoot(b)
+		u := makeRootURL(b)
 		cache, err := fromURL(u)
 		if err != nil {
 			b.Fatalf("Failed to create fscache: %v", err)
