@@ -11,7 +11,10 @@ defaults:
 jobs:
   test:
     name: Test
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     env:
       OUTPUTDIR: coverage
       COVERPROFILE: coverage.out
