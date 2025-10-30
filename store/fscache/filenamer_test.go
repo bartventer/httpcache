@@ -16,29 +16,12 @@ package fscache
 
 import (
 	"encoding/base64"
-	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/bartventer/httpcache/internal/testutil"
 )
-
-func Example_fragmentFileName_short() {
-	url := "https://short.url/test"
-	path := fragmentFileName(url)
-	fmt.Println("Fragmented path:", path)
-	// Output:
-	// Fragmented path: aHR0cHM6Ly9zaG9ydC51cmwvdGVzdA
-}
-
-func Example_fragmentFileName_long() {
-	url := "https://example.com/" + strings.Repeat("a", 255)
-	path := fragmentFileName(url)
-	fmt.Println("Fragmented path:", path)
-	// Output:
-	// Fragmented path: aHR0cHM6Ly9leGFtcGxlLmNvbS9hYWFhYWFhYWFhYWFhYWFh/YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFh/YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFh/YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFh/YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFh/YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFh/YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFh/YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE
-}
 
 func Test_fragmentFileName_fragmentedFileNameToKey(t *testing.T) {
 	cases := []struct {

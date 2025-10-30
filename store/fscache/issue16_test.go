@@ -43,7 +43,15 @@ func Test_Issue16_LongURLFragmentation(t *testing.T) {
 		{"long URL (1KB)", 1024, true},
 		{"very long URL (4KB)", 4096, true},
 		{"extremely long URL (10KB)", 10240, true},
-		{"massive URL (100KB)", 102400, true},
+		{
+			// While Go's stdlib handles long paths via \\?\ prefix on Windows,
+			// extremely deep directory hierarchies (2844+ levels) may still hit
+			// practical filesystem or OS limits beyond just path length.
+			// See fixLongPath logic in os/path_windows.go (https://cs.opensource.google/go/go/+/refs/tags/go1.25.3:src/os/path_windows.go;l=100;drc=79b809afb325ae266497e21597f126a3e98a1ef7)
+			"massive URL (100KB)",
+			102400,
+			runtime.GOOS != "windows",
+		},
 	}
 
 	for _, tt := range tests {

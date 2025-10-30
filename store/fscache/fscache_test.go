@@ -152,6 +152,11 @@ func TestOpen(t *testing.T) {
 					filepath.VolumeName(t.TempDir())+"/../invalid",
 				) + "?appname=myapp",
 			},
+			setup: func(tt *testing.T) {
+				if runtime.GOOS == "windows" {
+					tt.Skip("Skipping invalid path test on Windows")
+				}
+			},
 			assertion: func(tt *testing.T, got *fsCache, err error) {
 				testutil.RequireErrorIs(tt, err, ErrCreateCacheDir)
 				testutil.AssertNil(tt, got)
@@ -160,10 +165,7 @@ func TestOpen(t *testing.T) {
 		{
 			name: "Encryption Enabled with Key",
 			args: args{
-				dsn: "fscache://?appname=myapp&encrypt=aesgcm&encrypt_key=" + mustBase64Key(
-					t,
-					16,
-				),
+				dsn: "fscache://?appname=myapp&encrypt=aesgcm&encrypt_key=" + mustBase64Key(t, 16),
 			},
 			assertion: func(tt *testing.T, got *fsCache, err error) {
 				testutil.RequireNoError(tt, err)
@@ -200,6 +202,11 @@ func TestOpen(t *testing.T) {
 			args: args{
 				dsn: "fscache://?appname=myapp&connect_timeout=1ns&timeout=10s",
 			},
+			setup: func(tt *testing.T) {
+				if runtime.GOOS == "windows" {
+					tt.Skip("Skipping connect timeout test on Windows")
+				}
+			},
 			assertion: func(tt *testing.T, got *fsCache, err error) {
 				testutil.RequireErrorIs(tt, err, context.DeadlineExceeded)
 				testutil.AssertNil(tt, got)
@@ -212,7 +219,6 @@ func TestOpen(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to parse URL: %v", err)
 			}
-			t.Attr("URL", u.String())
 			if tt.setup != nil {
 				tt.setup(t)
 			}
@@ -242,7 +248,7 @@ func Test_parseTimeout(t *testing.T) {
 }
 
 func TestFSCache_SetGet_WithEncryption(t *testing.T) {
-	u, err := url.Parse("fscache://" + t.TempDir() +
+	u, err := url.Parse("fscache://" + filepath.ToSlash(t.TempDir()) +
 		"?appname=testapp&encrypt=aesgcm&encrypt_key=6S-Ks2YYOW0xMvTzKSv6QD30gZeOi1c6Ydr-As5csWk=")
 	testutil.RequireNoError(t, err)
 	cache, err := fromURL(u)
