@@ -28,6 +28,8 @@
 //   - encrypt_key (optional): The AES key, base64-encoded (URL-safe variant
 //     with/without padding as per RFC 4648 §5). Must decode to the correct
 //     length as required by [crypto/aes].
+//   - update_mtime (optional): Update file modification time on cache hits.
+//     Set to "on" to enable. Default: "off".
 //
 // Example DSNs:
 //
@@ -35,6 +37,7 @@
 //	fscache:///tmp/cache?appname=myapp&timeout=2s
 //	fscache:///tmp/cache?appname=myapp&connect_timeout=2s&timeout=1m
 //	fscache://?appname=myapp&encrypt=on&encrypt_key=6S-Ks2YYOW0xMvTzKSv6QD30gZeOi1c6Ydr-As5csWk=
+//	fscache://?appname=myapp&update_mtime=on
 //
 // Example environment variable:
 //
@@ -107,8 +110,9 @@ type fsCache struct {
 	connTimeout time.Duration // optional timeout for establishing the connection
 	timeout     time.Duration // optional timeout for operations
 	enc         encryptor     // optional encryptor for data
+	updateMTime bool          // whether to update file mtime on cache hits
 
-	// internal components
+	// internal dependencies
 
 	fn  fileNamer     // generates file names from keys
 	fnk fileNameKeyer // recovers keys from file names
@@ -177,12 +181,20 @@ func WithBaseDir(base string) Option {
 	})
 }
 
+// WithUpdateMTime enables updating file modification time on cache hits.
+func WithUpdateMTime(enabled bool) Option {
+	return optionFunc(func(c *fsCache) error {
+		c.updateMTime = enabled
+		return nil
+	})
+}
+
 func fromURL(u *url.URL) (*fsCache, error) {
 	appname := u.Query().Get("appname")
 	if appname == "" {
 		return nil, ErrMissingAppName
 	}
-	opts := make([]Option, 0, 4)
+	opts := make([]Option, 0, 5)
 	if u.Path != "" && u.Path != "/" {
 		opts = append(opts, WithBaseDir(u.Path))
 	}
@@ -195,6 +207,9 @@ func fromURL(u *url.URL) (*fsCache, error) {
 	if encrypt := u.Query().Get("encrypt"); encrypt == "on" || encrypt == "aesgcm" {
 		key := cmp.Or(u.Query().Get("encrypt_key"), os.Getenv("FSCACHE_ENCRYPT_KEY"))
 		opts = append(opts, WithEncryption(key))
+	}
+	if updateMTime := u.Query().Get("update_mtime"); updateMTime == "on" {
+		opts = append(opts, WithUpdateMTime(true))
 	}
 	if cap(opts) > len(opts) {
 		opts = slices.Clip(opts)
@@ -299,8 +314,13 @@ func (c *fsCache) Get(key string) ([]byte, error) {
 	}
 }
 
+// zeroTime is the zero value for [time.Time], used to leave access time unchanged
+// when updating modification time.
+var zeroTime time.Time
+
 func (c *fsCache) get(key string) ([]byte, error) {
-	f, err := c.root.Open(c.fn.FileName(key))
+	name := c.fn.FileName(key)
+	f, err := c.root.Open(name)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, errors.Join(driver.ErrNotExist, err)
@@ -315,6 +335,12 @@ func (c *fsCache) get(key string) ([]byte, error) {
 	if c.enc != nil {
 		data, err = c.enc.Decrypt(data)
 		if err != nil {
+			return nil, err
+		}
+	}
+	if c.updateMTime {
+		mtime := time.Now()
+		if err := c.root.Chtimes(name, zeroTime, mtime); err != nil {
 			return nil, err
 		}
 	}
