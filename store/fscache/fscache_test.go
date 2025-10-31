@@ -278,3 +278,38 @@ func TestFSCache_SetGet_WithEncryption(t *testing.T) {
 		"ciphertext should not contain plaintext",
 	)
 }
+
+func Test_fsCache_SetGet_UpdateMTime(t *testing.T) {
+	u, err := url.Parse("fscache://" + filepath.ToSlash(t.TempDir()) +
+		"?appname=testapp&update_mtime=on")
+	testutil.RequireNoError(t, err)
+	cache, err := fromURL(u)
+	testutil.RequireNoError(t, err)
+	t.Cleanup(func() { cache.Close() })
+
+	keyName := "mykey"
+	value := []byte("some value")
+
+	err = cache.Set(keyName, value)
+	testutil.RequireNoError(t, err)
+
+	// Get initial mtime
+	fname := cache.fn.FileName(keyName)
+	info1, err := fs.Stat(cache.root.FS(), fname)
+	testutil.RequireNoError(t, err)
+	mtime1 := info1.ModTime()
+
+	// Wait a bit to ensure mtime will be different
+	time.Sleep(2 * time.Second)
+
+	// Get the key to update mtime
+	_, err = cache.Get(keyName)
+	testutil.RequireNoError(t, err)
+
+	// Get updated mtime
+	info2, err := fs.Stat(cache.root.FS(), fname)
+	testutil.RequireNoError(t, err)
+	mtime2 := info2.ModTime()
+
+	testutil.AssertTrue(t, mtime2.After(mtime1))
+}
