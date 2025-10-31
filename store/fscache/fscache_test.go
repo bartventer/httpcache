@@ -17,6 +17,7 @@ package fscache
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"io/fs"
 	"net/url"
@@ -30,7 +31,12 @@ import (
 	"github.com/bartventer/httpcache/store/driver"
 )
 
-func (c *fsCache) Close() error { return c.root.Close() }
+func (c *fsCache) Close() error {
+	if err := c.root.Close(); err != nil {
+		fmt.Printf("Warning: failed to close cache: %v", err)
+	}
+	return nil
+}
 
 func makeRootURL(t testing.TB) *url.URL {
 	t.Helper()
