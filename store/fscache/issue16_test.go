@@ -54,6 +54,7 @@ func Test_Issue16_LongURLFragmentation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cache, err := Open("test-fragmentation", WithBaseDir(t.TempDir()))
 			testutil.RequireNoError(t, err)
+			defer cache.Close()
 
 			// Generate URL of specified length
 			url := "https://example.com/" + strings.Repeat(
