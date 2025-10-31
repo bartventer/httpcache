@@ -170,7 +170,9 @@ func WithEncryption(key string) Option {
 // WithBaseDir sets the base directory for the cache; default: user's OS cache directory.
 func WithBaseDir(base string) Option {
 	return optionFunc(func(c *fsCache) error {
-		c.base = base
+		if base != "" {
+			c.base = base
+		}
 		return nil
 	})
 }

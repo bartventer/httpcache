@@ -5,6 +5,7 @@ package acceptance
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/bartventer/httpcache/store/driver"
@@ -14,7 +15,7 @@ import (
 func RunB(b *testing.B, factory Factory) {
 	b.Helper()
 
-	key := "benchmark_key"
+	key := "benchmark_key" + strings.Repeat("x", 100)
 	value := []byte("benchmark_value")
 	b.Run("Get", func(b *testing.B) { benchmarkGet(b, factory.Make, key) })
 	b.Run("Set", func(b *testing.B) { benchmarkSet(b, factory.Make, key, value) })
