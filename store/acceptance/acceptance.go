@@ -12,7 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package acceptance provides a suite of acceptance tests for Cache implementations.
+// Package acceptance provides a suite of acceptance tests for Cache
+// implementations.
+//
+// This package ensures custom cache backends comply with httpcache
+// requirements, particularly byte-identical storage for no-transform directive
+// compliance (RFC 9111 §5.2.1.6, §5.2.2.6, RFC 9110 §7.7).
+//
+// # Usage
+//
+// Create a factory function and run the test suite:
+//
+//	func TestMyCache(t *testing.T) {
+//	    factory := acceptance.FactoryFunc(func() (driver.Conn, func()) {
+//	        cache := NewMyCache() // Your implementation
+//	        cleanup := func() { /* cleanup logic */ }
+//	        return cache, cleanup
+//	    })
+//	    acceptance.Run(t, factory)
+//	}
+//
+// # Tests
+//
+// Verifies byte-identical storage/retrieval, overwrite behavior, deletion semantics,
+// error handling for non-existent keys, and optional key listing functionality.
 package acceptance
 
 import (

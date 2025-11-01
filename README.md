@@ -12,8 +12,8 @@
 ## Features
 
 - **Plug-and-Play**: Just swap in as your HTTP client's transport; no extra configuration needed. [^1]
-- **RFC 9111 Compliance**: Handles validation, expiration, and revalidation ([see details](#rfc-9111-compliance-matrix)).
-- **Cache Control**: Supports all required HTTP cache control directives, as well as extensions like `stale-while-revalidate`, `stale-if-error`, and `immutable` ([view details](#field-definitions-details)).
+- **RFC 9111 Compliance**: Handles validation, expiration, and revalidation (see [details](#rfc-9111-compliance-matrix)).
+- **Cache Control**: Supports all required HTTP cache control directives, as well as extensions like `stale-while-revalidate`, `stale-if-error`, and `immutable` (see [details](#field-definitions-details)).
 - **Cache Backends**: Built-in support for file system and memory caches, with the ability to implement custom backends (see [Cache Backends](#cache-backends)).
 - **Cache Maintenance API**: Optional REST endpoints for listing, retrieving, and deleting cache entries (see [Cache Maintenance API](#cache-maintenance-api-debug-only)).
 - **Extensible**: Options for logging, transport and timeouts (see [Options](#options)).
@@ -264,7 +264,7 @@ Content-Type: application/json
 | 5.2.1.3. | `min-fresh`      |  Optional   |      ✔️      |                                                                |
 | 5.2.1.4. | `no-cache`       |  Optional   |      ✔️      |                                                                |
 | 5.2.1.5. | `no-store`       |  Optional   |      ✔️      |                                                                |
-| 5.2.1.6. | `no-transform`   |  Optional   |      ✔️      | Compliant by default - implementation never transforms content |
+| 5.2.1.6. | `no-transform`   |  Optional   |      ✔️      | See [Content Transformation Compliance](#content-transformation-compliance) |
 | 5.2.1.7. | `only-if-cached` |  Optional   |      ✔️      |                                                                |
 
 </details>
@@ -283,7 +283,7 @@ Content-Type: application/json
 | 5.2.2.3.  | `must-understand`  |  Required   |      ✔️      |                                                                |
 | 5.2.2.4.  | `no-cache`         |  Required   |      ✔️      | Both qualified and unqualified forms supported                 |
 | 5.2.2.5.  | `no-store`         |  Required   |      ✔️      |                                                                |
-| 5.2.2.6.  | `no-transform`     |  Required   |      ✔️      | Compliant by default - implementation never transforms content |
+| 5.2.2.6.  | `no-transform`     |  Required   |      ✔️      | See [Content Transformation Compliance](#content-transformation-compliance) |
 | 5.2.2.7.  | `private`          |     N/A     |     N/A     | Intended for shared caches; not applicable to private caches   |
 | 5.2.2.8.  | `proxy-revalidate` |     N/A     |     N/A     | Intended for shared caches; not applicable to private caches   |
 | 5.2.2.9.  | `public`           |  Optional   |      ✔️      |                                                                |
@@ -309,6 +309,22 @@ The following additional cache control directives are supported, as defined in v
 </details>
 </details>
 </details>
+
+### Content Transformation Compliance
+
+This implementation maintains RFC 9111 compliance regarding the `no-transform` directive by enforcing a **storage-only** architecture:
+
+```go
+type Conn interface {
+    Get(key string) ([]byte, error)    // Returns byte-identical data
+    Set(key string, data []byte) error // Stores byte-identical data  
+    Delete(key string) error           // Simple deletion
+}
+```
+
+**Storage optimizations** (compression, encryption, serialization) are allowed because they return **byte-identical** HTTP responses. This differs from transformations mentioned in [RFC 9110 §7.7](https://www.rfc-editor.org/rfc/rfc9110#section-7.7), like image format conversion which change actual response content.
+
+**Custom backends:** Must return byte-identical responses. Use the [`store/acceptance`](https://pkg.go.dev/github.com/bartventer/httpcache/store/acceptance) test suite to verify compliance.
 
 ## License
 
