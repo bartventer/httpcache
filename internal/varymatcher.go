@@ -41,26 +41,22 @@ func (vm *varyMatcher) VaryHeadersMatch(entries ResponseRefs, reqHdr http.Header
 		bVary := strings.TrimSpace(b.Vary)
 
 		// Responses with Vary: "*" are least preferred
-		aIsStar := aVary == "*"
-		bIsStar := bVary == "*"
-		if aIsStar && !bIsStar {
+		switch aIsStar, bIsStar := aVary == "*", bVary == "*"; {
+		case aIsStar && !bIsStar:
 			return 1 // b preferred
-		}
-		if bIsStar && !aIsStar {
+		case bIsStar && !aIsStar:
 			return -1 // a preferred
 		}
 
 		// Responses with Vary headers are preferred over those without
-		aHasVary := aVary != ""
-		bHasVary := bVary != ""
-		if aHasVary && !bHasVary {
+		switch aHasVary, bHasVary := aVary != "", bVary != ""; {
+		case aHasVary && !bHasVary:
 			return -1 // a preferred
-		}
-		if !aHasVary && bHasVary {
+		case !aHasVary && bHasVary:
 			return 1 // b preferred
 		}
 
-		// If both have Vary headers, sort by Date or ResponseTime
+		// If both have Vary headers, sort by ReceivedAt (earliest first)
 		return a.ReceivedAt.Compare(b.ReceivedAt)
 	})
 

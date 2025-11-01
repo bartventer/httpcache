@@ -281,12 +281,12 @@ func (l *Logger) logCache(ctx context.Context, level slog.Level, msg string, lp 
 		attrs = append(attrs, slog.String("trace_id", tracedID))
 	}
 	attrs = append(attrs,
-		groupAttrs("request",
+		slog.GroupAttrs("request",
 			slog.String("method", req.Method),
 			slog.String("url", req.URL.String()),
 			slog.String("host", req.Host),
 		),
-		groupAttrs("cache",
+		slog.GroupAttrs("cache",
 			slog.Any("status", event),
 			slog.String("url_key", cl.URLKey),
 		),
@@ -302,14 +302,4 @@ func (l *Logger) logCache(ctx context.Context, level slog.Level, msg string, lp 
 	r := slog.NewRecord(time.Now(), level, msg, pcs[0])
 	r.AddAttrs(attrs...)
 	_ = l.handler.Handle(ctx, r)
-}
-
-/*
-	+-------------------------------+
-	| Helpers  						|
-	+-------------------------------+
-*/
-
-func groupAttrs(key string, args ...slog.Attr) slog.Attr {
-	return slog.Attr{Key: key, Value: slog.GroupValue(args...)}
 }

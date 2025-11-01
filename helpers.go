@@ -24,14 +24,14 @@ import (
 
 func make504Response(req *http.Request) (*http.Response, error) {
 	var buf bytes.Buffer
-	buf.WriteString("HTTP/1.1 504 Gateway Timeout\r\n")
-	buf.WriteString("Cache-Control: no-cache\r\n")
-	buf.WriteString("Content-Length: 0\r\n")
-	buf.WriteString(
+	_, _ = buf.WriteString("HTTP/1.1 504 Gateway Timeout\r\n")
+	_, _ = buf.WriteString("Cache-Control: no-cache\r\n")
+	_, _ = buf.WriteString("Content-Length: 0\r\n")
+	_, _ = buf.WriteString(
 		internal.CacheStatusHeader + ": " + internal.CacheStatusBypass.Value + "\r\n",
 	)
-	buf.WriteString("Connection: close\r\n")
-	buf.WriteString("\r\n")
+	_, _ = buf.WriteString("Connection: close\r\n")
+	_, _ = buf.WriteString("\r\n")
 	return http.ReadResponse(bufio.NewReader(&buf), req)
 }
 

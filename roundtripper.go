@@ -144,7 +144,9 @@ func newTransport(conn driver.Conn, options ...Option) http.RoundTripper {
 	}
 	rt.upstream = cmp.Or(rt.upstream, http.DefaultTransport)
 	rt.swrTimeout = cmp.Or(max(rt.swrTimeout, 0), DefaultSWRTimeout)
-	rt.logger = cmp.Or(rt.logger, internal.NewLogger(slog.DiscardHandler))
+	if rt.logger == nil {
+		rt.logger = internal.NewLogger(slog.DiscardHandler)
+	}
 
 	rt.fc = internal.NewFreshnessCalculator(rt.clock)
 	rt.ci = internal.NewCacheInvalidator(rt.cache, rt.uk)

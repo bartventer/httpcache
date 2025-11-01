@@ -84,17 +84,15 @@ import (
 	"cmp"
 	"context"
 	"crypto/rand"
-	"io/fs"
-	"strings"
-
 	"errors"
 	"fmt"
 	"io"
-
+	"io/fs"
 	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/bartventer/httpcache/store"

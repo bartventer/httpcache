@@ -343,8 +343,8 @@ func makeVaryHash(vary map[string]string) uint64 {
 	keys = slices.AppendSeq(keys, maps.Keys(vary))
 	slices.Sort(keys)
 	for _, k := range keys {
-		h.Write([]byte(k))
-		h.Write([]byte(vary[k]))
+		_, _ = h.Write([]byte(k))
+		_, _ = h.Write([]byte(vary[k]))
 	}
 	return h.Sum64()
 }
