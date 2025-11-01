@@ -18,9 +18,10 @@
 // using a DSN string. It acts as a facade over the internal registry and the
 // driver interfaces defined in the [driver] subpackage.
 //
-// Most users will interact with this package to register drivers and open
-// cache connections, while backend implementations should use the [driver]
-// subpackage to define new cache backends.
+// Most users won't interact with this package directly, but will instead use it
+// indirectly through higher-level caching abstractions.
+// For more details on registering drivers and opening connections, see the
+// documentation for the [Register] and [Open] functions.
 package store
 
 import (
@@ -28,13 +29,31 @@ import (
 	"github.com/bartventer/httpcache/store/internal/registry"
 )
 
-// Register makes a driver implementation available by the provided name.
-// If Register is called twice with the same name or if driver is nil, it panics.
+// Register makes a driver implementation available by the provided name (e.g.,
+// "memcache", "fscache", etc.). The name corresponds to the scheme component of
+// a DSN string used in [Open] to identify the driver to use.
+// If Register is called twice with the same name or if driver is nil, it
+// panics.
 func Register(name string, driver driver.Driver) {
 	registry.Default().RegisterDriver(name, driver)
 }
 
-// Open opens a cache connection using the provided DSN.
+// Open establishes a connection to a registered driver, as specified in the
+// provided DSN string.
+//
+// The DSN (Data Source Name) format follows the pattern:
+//
+//	scheme://[path]?[query_parameters]
+//
+// Where:
+//   - scheme: The name of the registered driver (e.g., "memcache", "fscache",
+//     etc.).
+//   - path: An optional path component that can be used by the driver for
+//     configuration.
+//   - query_parameters: Optional key-value pairs for additional driver-
+//     specific settings.
+//
+// See [Register] for registering drivers.
 func Open(dsn string) (driver.Conn, error) {
 	return registry.Default().OpenConn(dsn)
 }
