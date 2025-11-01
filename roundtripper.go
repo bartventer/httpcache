@@ -116,12 +116,11 @@ var ErrOpenCache = errors.New("httpcache: failed to open cache")
 // NewTransport returns an [http.RoundTripper] that caches HTTP responses using
 // the specified cache backend.
 //
-// The backend is selected via a DSN (e.g., "memcache://", "fscache://"), and
-// should correlate to a registered cache driver in the [store] package.
-// Panics with [ErrOpenCache] if the cache cannot be opened.
+// The dsn parameter follows the format documented in [store.Open].
+// Configuration is done via functional options like [WithUpstream] and
+// [WithSWRTimeout].
 //
-// To configure the transport, you can use functional options such as
-// [WithUpstream], [WithSWRTimeout], and [WithLogger].
+// Panics with [ErrOpenCache] if the cache backend cannot be opened.
 func NewTransport(dsn string, options ...Option) http.RoundTripper {
 	cache, err := store.Open(dsn)
 	if err != nil {
@@ -145,7 +144,9 @@ func newTransport(conn driver.Conn, options ...Option) http.RoundTripper {
 	}
 	rt.upstream = cmp.Or(rt.upstream, http.DefaultTransport)
 	rt.swrTimeout = cmp.Or(max(rt.swrTimeout, 0), DefaultSWRTimeout)
-	rt.logger = cmp.Or(rt.logger, internal.NewLogger(slog.DiscardHandler))
+	if rt.logger == nil {
+		rt.logger = internal.NewLogger(slog.DiscardHandler)
+	}
 
 	rt.fc = internal.NewFreshnessCalculator(rt.clock)
 	rt.ci = internal.NewCacheInvalidator(rt.cache, rt.uk)
@@ -167,7 +168,9 @@ func newTransport(conn driver.Conn, options ...Option) http.RoundTripper {
 }
 
 // NewClient returns a new [http.Client], configured with a transport that
-// caches HTTP responses using the specified cache backend.
+// caches HTTP responses, using the specified cache backend DSN.
+//
+// See [NewTransport] for details on the DSN and available options.
 func NewClient(dsn string, options ...Option) *http.Client {
 	return &http.Client{Transport: NewTransport(dsn, options...)}
 }
