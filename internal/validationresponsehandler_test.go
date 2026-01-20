@@ -65,6 +65,14 @@ func Test_validationResponseHandler_HandleValidationResponse(t *testing.T) {
 				l: noopLogger,
 			},
 			setup: func(tt *testing.T, handler *validationResponseHandler) args {
+				handler.rs = &MockResponseStorer{
+					StoreResponseFunc: func(req *http.Request, resp *http.Response, key string, headers ResponseRefs, reqTime, respTime time.Time, refIndex int) error {
+						testutil.AssertEqual(tt, "key", key)
+						testutil.AssertTrue(tt, respTime.Equal(base))
+						testutil.AssertTrue(tt, reqTime.Equal(base))
+						return nil
+					},
+				}
 				return args{
 					req:  &http.Request{Method: http.MethodGet},
 					resp: &http.Response{StatusCode: http.StatusNotModified, Header: http.Header{}},
