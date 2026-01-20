@@ -340,6 +340,9 @@ func (r *transport) handleCacheHit(
 revalidate:
 	req = withConditionalHeaders(req, stored.Data.Header)
 	resp, start, end, err := r.roundTripTimed(req)
+	if err != nil {
+		return nil, err
+	}
 	ctx := internal.RevalidationContext{
 		URLKey:    urlKey,
 		Start:     start,
@@ -350,7 +353,7 @@ revalidate:
 		RefIndex:  refIndex,
 		Freshness: freshness,
 	}
-	return r.vrh.HandleValidationResponse(ctx, req, resp, err)
+	return r.vrh.HandleValidationResponse(ctx, req, resp)
 }
 
 func (r *transport) serveFromCache(
@@ -441,7 +444,7 @@ func (r *transport) backgroundRevalidate(
 			Freshness: freshness,
 		}
 		//nolint:bodyclose // The response is not used, so we don't need to close it.
-		_, err = r.vrh.HandleValidationResponse(revalCtx, req, resp, nil)
+		_, err = r.vrh.HandleValidationResponse(revalCtx, req, resp)
 		errc <- err
 	}()
 

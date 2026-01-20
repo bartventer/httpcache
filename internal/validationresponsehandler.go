@@ -24,7 +24,6 @@ type ValidationResponseHandler interface {
 		ctx RevalidationContext,
 		req *http.Request,
 		resp *http.Response,
-		err error,
 	) (*http.Response, error)
 }
 
@@ -75,13 +74,7 @@ func (r *validationResponseHandler) HandleValidationResponse(
 	ctx RevalidationContext,
 	req *http.Request,
 	resp *http.Response,
-	err error,
 ) (*http.Response, error) {
-
-	if err != nil {
-		return nil, err
-	}
-
 	if req.Method == http.MethodGet && resp.StatusCode == http.StatusNotModified {
 		// RFC 9111 §4.3.3 Handling Validation Responses (304 Not Modified)
 		// RFC 9111 §4.3.4 Freshening Stored Responses upon Validation
