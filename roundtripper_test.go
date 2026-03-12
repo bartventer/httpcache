@@ -65,8 +65,8 @@ func mockTransport(fields func(rt *transport)) *transport {
 		ci:   &internal.MockCacheInvalidator{},
 		rs:   &internal.MockResponseStorer{},
 		vrh: &internal.MockValidationResponseHandler{
-			HandleValidationResponseFunc: func(ctx internal.RevalidationContext, req *http.Request, resp *http.Response, err error) (*http.Response, error) {
-				return resp, err
+			HandleValidationResponseFunc: func(ctx internal.RevalidationContext, req *http.Request, resp *http.Response) (*http.Response, error) {
+				return resp, nil
 			},
 		},
 		clock: &internal.MockClock{NowResult: time.Now()},
@@ -225,9 +225,9 @@ func Test_transport_CacheHit_MustRevalidate_Stale(t *testing.T) {
 			},
 		}
 		rt.vrh = &internal.MockValidationResponseHandler{
-			HandleValidationResponseFunc: func(ctx internal.RevalidationContext, req *http.Request, resp *http.Response, err error) (*http.Response, error) {
+			HandleValidationResponseFunc: func(ctx internal.RevalidationContext, req *http.Request, resp *http.Response) (*http.Response, error) {
 				mockVHCalled = true
-				return resp, err
+				return resp, nil
 			},
 		}
 	})
@@ -260,9 +260,9 @@ func Test_transport_CacheHit_NoCacheUnqualified(t *testing.T) {
 			},
 		}
 		rt.vrh = &internal.MockValidationResponseHandler{
-			HandleValidationResponseFunc: func(ctx internal.RevalidationContext, req *http.Request, resp *http.Response, err error) (*http.Response, error) {
+			HandleValidationResponseFunc: func(ctx internal.RevalidationContext, req *http.Request, resp *http.Response) (*http.Response, error) {
 				mockVHCalled = true
-				return resp, err
+				return resp, nil
 			},
 		}
 	})
@@ -540,10 +540,10 @@ func Test_transport_RevalidationPath(t *testing.T) {
 			},
 		}
 		rt.vrh = &internal.MockValidationResponseHandler{
-			HandleValidationResponseFunc: func(ctx internal.RevalidationContext, req *http.Request, resp *http.Response, err error) (*http.Response, error) {
+			HandleValidationResponseFunc: func(ctx internal.RevalidationContext, req *http.Request, resp *http.Response) (*http.Response, error) {
 				mockVHCalled = true
 				internal.CacheStatusRevalidated.ApplyTo(resp.Header)
-				return resp, err
+				return resp, nil
 			},
 		}
 	})
@@ -597,9 +597,9 @@ func Test_transport_SWR_NormalPath(t *testing.T) {
 		rt.clock = &internal.MockClock{NowResult: base.Add(5 * time.Second), SinceResult: 0}
 		rt.siep = &internal.MockStaleIfErrorPolicy{}
 		rt.vrh = &internal.MockValidationResponseHandler{
-			HandleValidationResponseFunc: func(ctx internal.RevalidationContext, req *http.Request, resp *http.Response, err error) (*http.Response, error) {
+			HandleValidationResponseFunc: func(ctx internal.RevalidationContext, req *http.Request, resp *http.Response) (*http.Response, error) {
 				revalidateCalled <- struct{}{} // Signal that revalidation was called
-				return resp, err
+				return resp, nil
 			},
 		}
 		rt.swrTimeout = DefaultSWRTimeout
@@ -670,7 +670,7 @@ func Test_transport_SWR_NormalPathAndError(t *testing.T) {
 		rt.clock = &internal.MockClock{NowResult: base.Add(5 * time.Second), SinceResult: 0}
 		rt.swrTimeout = swrTimeout
 		rt.vrh = &internal.MockValidationResponseHandler{
-			HandleValidationResponseFunc: func(ctx internal.RevalidationContext, req *http.Request, resp *http.Response, err error) (*http.Response, error) {
+			HandleValidationResponseFunc: func(ctx internal.RevalidationContext, req *http.Request, resp *http.Response) (*http.Response, error) {
 				defer func() { revalidateCalled <- struct{}{} }() // Signal that revalidation was called
 				return nil, errors.New("revalidation error")
 			},
@@ -737,9 +737,9 @@ func Test_transport_SWR_Timeout(t *testing.T) {
 		rt.clock = &internal.MockClock{NowResult: base.Add(5 * time.Second), SinceResult: 0}
 		rt.swrTimeout = swrTimeout
 		rt.vrh = &internal.MockValidationResponseHandler{
-			HandleValidationResponseFunc: func(ctx internal.RevalidationContext, req *http.Request, resp *http.Response, err error) (*http.Response, error) {
+			HandleValidationResponseFunc: func(ctx internal.RevalidationContext, req *http.Request, resp *http.Response) (*http.Response, error) {
 				revalidateCalled <- struct{}{} // Signal that revalidation was called
-				return resp, err
+				return resp, nil
 			},
 		}
 		rt.upstream = &internal.MockRoundTripper{

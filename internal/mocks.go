@@ -183,16 +183,15 @@ func (m *MockCacheInvalidator) InvalidateCache(
 var _ ValidationResponseHandler = (*MockValidationResponseHandler)(nil)
 
 type MockValidationResponseHandler struct {
-	HandleValidationResponseFunc func(ctx RevalidationContext, req *http.Request, resp *http.Response, err error) (*http.Response, error)
+	HandleValidationResponseFunc func(ctx RevalidationContext, req *http.Request, resp *http.Response) (*http.Response, error)
 }
 
 func (m *MockValidationResponseHandler) HandleValidationResponse(
 	ctx RevalidationContext,
 	req *http.Request,
 	resp *http.Response,
-	err error,
 ) (*http.Response, error) {
-	return m.HandleValidationResponseFunc(ctx, req, resp, err)
+	return m.HandleValidationResponseFunc(ctx, req, resp)
 }
 
 var _ VaryMatcher = (*MockVaryMatcher)(nil)

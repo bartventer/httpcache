@@ -24,7 +24,6 @@ type ValidationResponseHandler interface {
 		ctx RevalidationContext,
 		req *http.Request,
 		resp *http.Response,
-		err error,
 	) (*http.Response, error)
 }
 
@@ -75,9 +74,8 @@ func (r *validationResponseHandler) HandleValidationResponse(
 	ctx RevalidationContext,
 	req *http.Request,
 	resp *http.Response,
-	err error,
 ) (*http.Response, error) {
-	if err == nil && req.Method == http.MethodGet && resp.StatusCode == http.StatusNotModified {
+	if req.Method == http.MethodGet && resp.StatusCode == http.StatusNotModified {
 		// RFC 9111 §4.3.3 Handling Validation Responses (304 Not Modified)
 		// RFC 9111 §4.3.4 Freshening Stored Responses upon Validation
 		mergeResponseHeaders(ctx.Stored.Data, resp.Header)
@@ -99,7 +97,7 @@ func (r *validationResponseHandler) HandleValidationResponse(
 		ccResp     CCResponseDirectives
 		ccRespOnce bool
 	)
-	if (err != nil || isStaleErrorAllowed(resp.StatusCode)) && req.Method == http.MethodGet {
+	if isStaleErrorAllowed(resp.StatusCode) && req.Method == http.MethodGet {
 		ccResp = ParseCCResponseDirectives(resp.Header)
 		ccRespOnce = true
 		if r.siep.CanStaleOnError(ctx.Freshness, ccResp) {
@@ -110,10 +108,6 @@ func (r *validationResponseHandler) HandleValidationResponse(
 			r.l.LogCacheStaleIfError(req, ctx.URLKey, ctx.ToMisc(ccResp))
 			return ctx.Stored.Data, nil
 		}
-	}
-
-	if err != nil {
-		return nil, err
 	}
 
 	if !ccRespOnce {

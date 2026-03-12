@@ -15,7 +15,6 @@
 package internal
 
 import (
-	"errors"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -48,9 +47,8 @@ func Test_validationResponseHandler_HandleValidationResponse(t *testing.T) {
 	}
 
 	type args struct {
-		req      *http.Request
-		resp     *http.Response
-		inputErr error
+		req  *http.Request
+		resp *http.Response
 	}
 
 	tests := []struct {
@@ -107,31 +105,7 @@ func Test_validationResponseHandler_HandleValidationResponse(t *testing.T) {
 			},
 		},
 		{
-			name: "GET with error, stale allowed",
-			handler: &validationResponseHandler{
-				l: noopLogger,
-				siep: &MockStaleIfErrorPolicy{
-					CanStaleOnErrorFunc: func(*Freshness, ...StaleIfErrorer) bool { return true },
-				},
-				clock: &MockClock{NowResult: base},
-			},
-			setup: func(tt *testing.T, handler *validationResponseHandler) args {
-				return args{
-					req: &http.Request{Method: http.MethodGet},
-					resp: &http.Response{
-						StatusCode: http.StatusInternalServerError,
-						Header:     http.Header{"Cache-Control": {"stale-if-error=60"}},
-					},
-					inputErr: errors.New("network error"),
-				}
-			},
-			assert: func(tt *testing.T, got *http.Response, err error) {
-				testutil.RequireNoError(tt, err)
-				testutil.AssertEqual(tt, http.StatusOK, got.StatusCode)
-			},
-		},
-		{
-			name: "GET with error, stale not allowed",
+			name: "GET with error status, stale not allowed",
 			handler: &validationResponseHandler{
 				l: noopLogger,
 				siep: &MockStaleIfErrorPolicy{
@@ -140,18 +114,20 @@ func Test_validationResponseHandler_HandleValidationResponse(t *testing.T) {
 				clock: &MockClock{NowResult: base},
 			},
 			setup: func(tt *testing.T, handler *validationResponseHandler) args {
+				handler.ce = CacheabilityEvaluatorFunc(
+					func(*http.Response, CCRequestDirectives, CCResponseDirectives) bool { return false },
+				)
 				return args{
 					req: &http.Request{Method: http.MethodGet},
 					resp: &http.Response{
 						StatusCode: http.StatusInternalServerError,
 						Header:     http.Header{},
 					},
-					inputErr: errors.New("network error"),
 				}
 			},
 			assert: func(tt *testing.T, got *http.Response, err error) {
-				testutil.RequireError(tt, err)
-				testutil.AssertNil(tt, got)
+				testutil.RequireNoError(tt, err)
+				testutil.AssertEqual(tt, "BYPASS", got.Header.Get(CacheStatusHeader))
 			},
 		},
 		{
@@ -210,7 +186,7 @@ func Test_validationResponseHandler_HandleValidationResponse(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			a := tt.setup(t, tt.handler)
-			got, err := tt.handler.HandleValidationResponse(ctx, a.req, a.resp, a.inputErr)
+			got, err := tt.handler.HandleValidationResponse(ctx, a.req, a.resp)
 			tt.assert(t, got, err)
 		})
 	}
