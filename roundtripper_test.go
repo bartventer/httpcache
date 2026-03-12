@@ -22,13 +22,14 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/bartventer/httpcache/internal"
 	"github.com/bartventer/httpcache/internal/testutil"
 	"github.com/bartventer/httpcache/store"
-	_ "github.com/bartventer/httpcache/store/memcache"
+	"github.com/bartventer/httpcache/store/memcache"
 )
 
 func mockTransport(fields func(rt *transport)) *transport {
@@ -858,5 +859,101 @@ func Test_transport_Vary(t *testing.T) {
 		body, _ := io.ReadAll(resp.Body)
 		defer resp.Body.Close()
 		testutil.AssertEqual(t, tc.wantBody, string(body), i)
+	}
+}
+
+// This test verifies that when a cached response is revalidated via a 304 Not
+// Modified, the cache entry is updated with any new headers from the 304
+// response, and subsequent requests can HIT the cache again until it becomes
+// stale once more.
+func Test_transport_RevalidationUpdatesCache(t *testing.T) {
+	var originCalls atomic.Int32
+
+	const etag = `"v1"`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		originCalls.Add(1)
+
+		// Revalidation path: client sends validator, server says cached body is still valid
+		if r.Header.Get("If-None-Match") == etag {
+			w.Header().Set("ETag", etag)
+			w.Header().Set("Cache-Control", "max-age=1")
+			w.Header().Set("Expires", time.Now().Add(1*time.Second).UTC().Format(http.TimeFormat))
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+
+		// Initial fetch
+		w.Header().Set("ETag", etag)
+		w.Header().Set("Cache-Control", "max-age=1")
+		w.Header().Set("Expires", time.Now().Add(1*time.Second).UTC().Format(http.TimeFormat))
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("hello"))
+	}))
+	defer server.Close()
+
+	c := memcache.Open()
+	tr := newTransport(c)
+
+	req, _ := http.NewRequest(http.MethodGet, server.URL, nil)
+
+	tests := []struct {
+		name                string
+		expectedStatusCode  int
+		expectedCacheStatus string
+		expectedBody        string
+		expectedOriginCalls int32
+		preReqFunc          func()
+	}{
+		{
+			name:                "Initial request should be a MISS",
+			expectedStatusCode:  http.StatusOK,
+			expectedCacheStatus: internal.CacheStatusMiss.Value,
+			expectedBody:        "hello",
+			expectedOriginCalls: 1,
+		},
+		{
+			name:                "Second request should be a HIT",
+			expectedStatusCode:  http.StatusOK,
+			expectedCacheStatus: internal.CacheStatusHit.Value,
+			expectedBody:        "hello",
+			expectedOriginCalls: 1,
+		},
+		{
+			name:                "After becoming stale, request should be REVALIDATED via 304",
+			expectedStatusCode:  http.StatusOK,
+			expectedCacheStatus: internal.CacheStatusRevalidated.Value,
+			expectedBody:        "hello",
+			expectedOriginCalls: 2,
+			preReqFunc: func() {
+				time.Sleep(1100 * time.Millisecond)
+			},
+		},
+		{
+			name:                "After revalidation, request should be HIT again",
+			expectedStatusCode:  http.StatusOK,
+			expectedCacheStatus: internal.CacheStatusHit.Value,
+			expectedBody:        "hello",
+			expectedOriginCalls: 2,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.preReqFunc != nil {
+				tc.preReqFunc()
+			}
+			resp, err := tr.RoundTrip(req)
+			testutil.RequireNoError(t, err)
+			testutil.AssertEqual(t, tc.expectedStatusCode, resp.StatusCode)
+			testutil.AssertEqual(
+				t,
+				tc.expectedCacheStatus,
+				resp.Header.Get(internal.CacheStatusHeader),
+			)
+			body, _ := io.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+			testutil.AssertEqual(t, tc.expectedBody, string(body))
+			testutil.AssertEqual(t, tc.expectedOriginCalls, originCalls.Load())
+		})
 	}
 }

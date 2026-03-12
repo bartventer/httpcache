@@ -80,7 +80,16 @@ func (r *validationResponseHandler) HandleValidationResponse(
 	if err == nil && req.Method == http.MethodGet && resp.StatusCode == http.StatusNotModified {
 		// RFC 9111 §4.3.3 Handling Validation Responses (304 Not Modified)
 		// RFC 9111 §4.3.4 Freshening Stored Responses upon Validation
-		updateStoredHeaders(ctx.Stored.Data, resp)
+		mergeResponseHeaders(ctx.Stored.Data, resp.Header)
+		_ = r.rs.StoreResponse(
+			req,
+			ctx.Stored.Data,
+			ctx.URLKey,
+			ctx.Refs,
+			ctx.Start,
+			ctx.End,
+			ctx.RefIndex,
+		)
 		CacheStatusRevalidated.ApplyTo(ctx.Stored.Data.Header)
 		r.l.LogCacheRevalidated(req, ctx.URLKey, ctx.ToMisc(nil))
 		return ctx.Stored.Data, nil
