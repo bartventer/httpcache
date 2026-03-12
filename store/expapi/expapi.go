@@ -98,12 +98,18 @@ func retrieve(conn driver.Conn) http.Handler {
 			if errors.Is(err, driver.ErrNotExist) {
 				http.Error(w, fmt.Sprintf("key %q not found", key), http.StatusNotFound)
 			} else {
-				http.Error(w, fmt.Sprintf("failed to get value for key %q: %v", key, err), http.StatusInternalServerError)
+				http.Error(
+					w,
+					fmt.Sprintf("failed to get value for key %q: %v", key, err),
+					http.StatusInternalServerError,
+				)
 			}
 			return
 		}
 		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.WriteHeader(http.StatusOK)
+		//nolint:gosec // G705: debug/admin endpoint intentionally returns raw cache bytes (not HTML rendering).
 		if _, err := w.Write(value); err != nil {
 			http.Error(
 				w,
@@ -121,7 +127,11 @@ func destroy(conn driver.Conn) http.Handler {
 			if errors.Is(err, driver.ErrNotExist) {
 				http.Error(w, fmt.Sprintf("key %q not found", key), http.StatusNotFound)
 			} else {
-				http.Error(w, fmt.Sprintf("failed to delete value for key %q: %v", key, err), http.StatusInternalServerError)
+				http.Error(
+					w,
+					fmt.Sprintf("failed to delete value for key %q: %v", key, err),
+					http.StatusInternalServerError,
+				)
 			}
 			return
 		}
