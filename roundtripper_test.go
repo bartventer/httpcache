@@ -998,7 +998,11 @@ func Test_transport_Vary_MultipleHeaders(t *testing.T) {
 	// Request 1: MISS — first request for en-us + 2025-01-01
 	resp := makeReq("en-us", "2025-01-01")
 	testutil.AssertEqual(t, http.StatusOK, resp.StatusCode)
-	testutil.AssertEqual(t, internal.CacheStatusMiss.Value, resp.Header.Get(internal.CacheStatusHeader))
+	testutil.AssertEqual(
+		t,
+		internal.CacheStatusMiss.Value,
+		resp.Header.Get(internal.CacheStatusHeader),
+	)
 	body, _ := io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
 	testutil.AssertEqual(t, "lang=en-us date=2025-01-01", string(body))
@@ -1006,7 +1010,11 @@ func Test_transport_Vary_MultipleHeaders(t *testing.T) {
 	// Request 2: HIT — same headers
 	resp = makeReq("en-us", "2025-01-01")
 	testutil.AssertEqual(t, http.StatusOK, resp.StatusCode)
-	testutil.AssertEqual(t, internal.CacheStatusHit.Value, resp.Header.Get(internal.CacheStatusHeader))
+	testutil.AssertEqual(
+		t,
+		internal.CacheStatusHit.Value,
+		resp.Header.Get(internal.CacheStatusHeader),
+	)
 	body, _ = io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
 	testutil.AssertEqual(t, "lang=en-us date=2025-01-01", string(body))
@@ -1015,8 +1023,12 @@ func Test_transport_Vary_MultipleHeaders(t *testing.T) {
 	// This is the bug: without the fix, this incorrectly returns a HIT
 	resp = makeReq("en-us", "2026-01-01")
 	testutil.AssertEqual(t, http.StatusOK, resp.StatusCode)
-	testutil.AssertEqual(t, internal.CacheStatusMiss.Value, resp.Header.Get(internal.CacheStatusHeader),
-		"X-Compatibility-Date is a Vary header; different value must produce a cache MISS")
+	testutil.AssertEqual(
+		t,
+		internal.CacheStatusMiss.Value,
+		resp.Header.Get(internal.CacheStatusHeader),
+		"X-Compatibility-Date is a Vary header; different value must produce a cache MISS",
+	)
 	body, _ = io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
 	testutil.AssertEqual(t, "lang=en-us date=2026-01-01", string(body))
@@ -1024,7 +1036,11 @@ func Test_transport_Vary_MultipleHeaders(t *testing.T) {
 	// Request 4: HIT — same as request 3
 	resp = makeReq("en-us", "2026-01-01")
 	testutil.AssertEqual(t, http.StatusOK, resp.StatusCode)
-	testutil.AssertEqual(t, internal.CacheStatusHit.Value, resp.Header.Get(internal.CacheStatusHeader))
+	testutil.AssertEqual(
+		t,
+		internal.CacheStatusHit.Value,
+		resp.Header.Get(internal.CacheStatusHeader),
+	)
 	body, _ = io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
 	testutil.AssertEqual(t, "lang=en-us date=2026-01-01", string(body))
