@@ -16,6 +16,7 @@ package httpcache
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -956,4 +957,91 @@ func Test_transport_RevalidationUpdatesCache(t *testing.T) {
 			testutil.AssertEqual(t, tc.expectedOriginCalls, originCalls.Load())
 		})
 	}
+}
+
+// Test_transport_Vary_MultipleHeaders verifies that the transport correctly
+// handles multiple Vary headers that are sent as separate header lines
+// (instead of a single comma-separated line). This is a common scenario in
+// practice, and there was a bug where only the first Vary header line was
+// being processed, causing incorrect cache hits when subsequent Vary headers
+// were not considered.
+// Regression test for: https://github.com/bartventer/httpcache/issues/32
+func Test_transport_Vary_MultipleHeaders(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Simulate server returning multiple separate Vary header lines
+		// (not comma-separated, but as distinct headers)
+		w.Header().Add("Vary", "Accept-Language")
+		w.Header().Add("Vary", "X-Compatibility-Date")
+		w.Header().Set("Cache-Control", "max-age=60")
+		w.WriteHeader(http.StatusOK)
+
+		lang := r.Header.Get("Accept-Language")
+		date := r.Header.Get("X-Compatibility-Date")
+		_, _ = fmt.Fprintf(w, "lang=%s date=%s", lang, date)
+	}))
+	defer server.Close()
+
+	c := memcache.Open()
+	tr := newTransport(c, WithLogger(slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	}))))
+
+	makeReq := func(lang, date string) *http.Response {
+		req, _ := http.NewRequest(http.MethodGet, server.URL, nil)
+		req.Header.Set("Accept-Language", lang)
+		req.Header.Set("X-Compatibility-Date", date)
+		resp, err := tr.RoundTrip(req)
+		testutil.RequireNoError(t, err)
+		return resp
+	}
+
+	// Request 1: MISS — first request for en-us + 2025-01-01
+	resp := makeReq("en-us", "2025-01-01")
+	testutil.AssertEqual(t, http.StatusOK, resp.StatusCode)
+	testutil.AssertEqual(
+		t,
+		internal.CacheStatusMiss.Value,
+		resp.Header.Get(internal.CacheStatusHeader),
+	)
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	testutil.AssertEqual(t, "lang=en-us date=2025-01-01", string(body))
+
+	// Request 2: HIT — same headers
+	resp = makeReq("en-us", "2025-01-01")
+	testutil.AssertEqual(t, http.StatusOK, resp.StatusCode)
+	testutil.AssertEqual(
+		t,
+		internal.CacheStatusHit.Value,
+		resp.Header.Get(internal.CacheStatusHeader),
+	)
+	body, _ = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	testutil.AssertEqual(t, "lang=en-us date=2025-01-01", string(body))
+
+	// Request 3: MISS — X-Compatibility-Date changed, must be a different cache entry
+	// This is the bug: without the fix, this incorrectly returns a HIT
+	resp = makeReq("en-us", "2026-01-01")
+	testutil.AssertEqual(t, http.StatusOK, resp.StatusCode)
+	testutil.AssertEqual(
+		t,
+		internal.CacheStatusMiss.Value,
+		resp.Header.Get(internal.CacheStatusHeader),
+		"X-Compatibility-Date is a Vary header; different value must produce a cache MISS",
+	)
+	body, _ = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	testutil.AssertEqual(t, "lang=en-us date=2026-01-01", string(body))
+
+	// Request 4: HIT — same as request 3
+	resp = makeReq("en-us", "2026-01-01")
+	testutil.AssertEqual(t, http.StatusOK, resp.StatusCode)
+	testutil.AssertEqual(
+		t,
+		internal.CacheStatusHit.Value,
+		resp.Header.Get(internal.CacheStatusHeader),
+	)
+	body, _ = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	testutil.AssertEqual(t, "lang=en-us date=2026-01-01", string(body))
 }

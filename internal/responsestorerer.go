@@ -18,6 +18,7 @@ import (
 	"maps"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -59,7 +60,8 @@ func (r *responseStorer) StoreResponse(
 	// Remove hop-by-hop headers as per RFC 9111 §3.1
 	removeHopByHopHeaders(resp)
 
-	vary := resp.Header.Get("Vary")
+	// Join multiple Vary headers into a single string
+	vary := strings.Join(resp.Header.Values("Vary"), ",")
 	varyResolved := maps.Collect(
 		r.vhn.NormalizeVaryHeader(vary, req.Header),
 	)

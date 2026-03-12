@@ -98,7 +98,11 @@ func retrieve(conn driver.Conn) http.Handler {
 			if errors.Is(err, driver.ErrNotExist) {
 				http.Error(w, fmt.Sprintf("key %q not found", key), http.StatusNotFound)
 			} else {
-				http.Error(w, fmt.Sprintf("failed to get value for key %q: %v", key, err), http.StatusInternalServerError)
+				http.Error(
+					w,
+					fmt.Sprintf("failed to get value for key %q: %v", key, err),
+					http.StatusInternalServerError,
+				)
 			}
 			return
 		}
@@ -121,7 +125,11 @@ func destroy(conn driver.Conn) http.Handler {
 			if errors.Is(err, driver.ErrNotExist) {
 				http.Error(w, fmt.Sprintf("key %q not found", key), http.StatusNotFound)
 			} else {
-				http.Error(w, fmt.Sprintf("failed to delete value for key %q: %v", key, err), http.StatusInternalServerError)
+				http.Error(
+					w,
+					fmt.Sprintf("failed to delete value for key %q: %v", key, err),
+					http.StatusInternalServerError,
+				)
 			}
 			return
 		}
