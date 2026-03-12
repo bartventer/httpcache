@@ -88,17 +88,17 @@ func removeHopByHopHeaders(resp *http.Response) {
 	}
 }
 
-// updateStoredHeaders updates the stored response headers with the
-// headers from the revalidated response, excluding hop-by-hop headers
-// and the Content-Length header, as per RFC 9111 §3.2.
-func updateStoredHeaders(storedResp, resp *http.Response) {
-	omitted := hopByHopHeaders(resp.Header)
-	omitted["Content-Length"] = struct{}{}
-	for hdr, val := range resp.Header {
-		if _, ok := omitted[hdr]; ok {
+// mergeResponseHeaders merges the headers from the revalidated response into
+// the stored response, excluding hop-by-hop headers and the Content-Length
+// header, as per RFC 9111 §3.2.
+func mergeResponseHeaders(targetResp *http.Response, srcHdrs http.Header) {
+	nonCacheHdrs := hopByHopHeaders(srcHdrs)
+	nonCacheHdrs["Content-Length"] = struct{}{}
+	for hdr, val := range srcHdrs {
+		if _, ok := nonCacheHdrs[hdr]; ok {
 			continue
 		}
-		storedResp.Header[hdr] = val
+		targetResp.Header[hdr] = val
 	}
 }
 
