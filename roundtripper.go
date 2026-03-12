@@ -288,6 +288,7 @@ func (r *transport) handleCacheMiss(
 	return resp, nil
 }
 
+//nolint:cyclop // The complexity of this function is justified by the need to handle multiple caching scenarios according to RFC 9111.
 func (r *transport) handleCacheHit(
 	req *http.Request,
 	stored *internal.Response,
