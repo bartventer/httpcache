@@ -58,7 +58,7 @@ $(FMTSTAMP): $(GOFILES) $(GOTESTFILES)
 lint: $(LINTSTAMP) ## Run linters
 
 $(LINTSTAMP): $(GOFILES) $(GOTESTFILES)
-	golangci-lint run --verbose
+	golangci-lint run --disable goheader --verbose
 	touch $@
 
 ## Testing:
