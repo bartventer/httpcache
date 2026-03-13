@@ -21,28 +21,19 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-)
 
-func defaultPort(scheme string) string {
-	switch scheme {
-	case "http":
-		return "80"
-	case "https":
-		return "443"
-	default:
-		return ""
-	}
-}
+	"github.com/bartventer/httpcache/internal/urlutil"
+)
 
 // sameOrigin checks if two URIs have the same origin (scheme, host, port).
 func sameOrigin(a, b *url.URL) bool {
 	aPort := a.Port()
 	if aPort == "" {
-		aPort = defaultPort(a.Scheme)
+		aPort = urlutil.DefaultPort(a.Scheme)
 	}
 	bPort := b.Port()
 	if bPort == "" {
-		bPort = defaultPort(b.Scheme)
+		bPort = urlutil.DefaultPort(b.Scheme)
 	}
 	return strings.EqualFold(a.Scheme, b.Scheme) &&
 		strings.EqualFold(a.Hostname(), b.Hostname()) &&
@@ -114,43 +105,6 @@ func isStaleErrorAllowed(code int) bool {
 	default:
 		return false
 	}
-}
-
-// From Go's net/url package.
-// Copyright 2009 The Go Authors. All rights reserved.
-//
-// splitHostPort separates host and port. If the port is not valid, it returns
-// the entire input as host, and it doesn't check the validity of the host.
-// Unlike net.SplitHostPort, but per RFC 3986, it requires ports to be numeric.
-func splitHostPort(hostPort string) (host, port string) {
-	host = hostPort
-	colon := strings.LastIndexByte(host, ':')
-	if colon != -1 && validOptionalPort(host[colon:]) {
-		host, port = host[:colon], host[colon+1:]
-	}
-	if strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
-		host = host[1 : len(host)-1]
-	}
-	return
-}
-
-// From Go's net/url package.
-// Copyright 2009 The Go Authors. All rights reserved.
-//
-// validOptionalPort reports whether port is either an empty string or matches "/^:\d*$/".
-func validOptionalPort(port string) bool {
-	if port == "" {
-		return true
-	}
-	if port[0] != ':' {
-		return false
-	}
-	for _, b := range port[1:] {
-		if b < '0' || b > '9' {
-			return false
-		}
-	}
-	return true
 }
 
 func IsUnsafeMethod(method string) bool {

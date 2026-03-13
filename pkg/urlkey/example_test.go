@@ -12,23 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package internal
+package urlkey_test
 
 import (
 	"fmt"
 	"net/url"
+
+	"github.com/bartventer/httpcache/pkg/urlkey"
 )
 
-func Example_makeURLKey() {
+func ExampleFromURL() {
 	u, err := url.Parse(
 		"https://example.com:8443/abc?query=param&another=value#fragment=part1&part2",
 	)
 	if err != nil {
-		fmt.Println("Error parsing URL:", err)
-		return
+		panic(err)
 	}
-	cacheKey := makeURLKey(u)
-	fmt.Println("Cache Key:", cacheKey)
+	key := urlkey.FromURL(u)
+	fmt.Println(key)
 	// Output:
-	// Cache Key: https://example.com:8443/abc?query=param&another=value
+	// https://example.com:8443/abc?query=param&another=value
 }

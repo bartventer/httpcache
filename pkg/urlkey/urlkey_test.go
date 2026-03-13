@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package internal
+package urlkey
 
 import (
 	"net/url"
@@ -21,7 +21,7 @@ import (
 	"github.com/bartventer/httpcache/internal/testutil"
 )
 
-func Test_makeKey(t *testing.T) {
+func TestFromURL(t *testing.T) {
 	tests := []struct {
 		raw      string
 		expected string
@@ -80,6 +80,6 @@ func Test_makeKey(t *testing.T) {
 			t.Errorf("url.Parse(%q) failed: %v", tt.raw, err)
 			continue
 		}
-		testutil.AssertEqual(t, makeURLKey(u), tt.expected, "makeURLKey(%q)", tt.raw)
+		testutil.AssertEqual(t, FromURL(u), tt.expected, "FromURL(%q)", tt.raw)
 	}
 }
