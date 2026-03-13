@@ -16,6 +16,7 @@
         "--output.text.path=stdout",
         "--output.text.print-issued-lines=false",
         "--show-stats=false",
+        "--disable goheader",
         "--fix"
     ],
     "editor.detectIndentation": true

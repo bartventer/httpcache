@@ -1,4 +1,4 @@
-// Copyright (c) 2025 Bart Venter <bartventer@proton.me>
+// Copyright (c) 2026 Bart Venter <72999113+bartventer@users.noreply.github.com>
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -84,7 +84,7 @@ func TestParseCCRequestDirectives_AllDirectives(t *testing.T) {
 
 	t.Run("NoCache (quoted CSV)", func(t *testing.T) {
 		raw := got["no-cache"]
-		noCacheSeq, valid := RawCSVSeq(ParseQuotedString(raw)).Value()
+		noCacheSeq, valid := RawCSV(ParseQuotedString(raw)).Value()
 		testutil.RequireTrue(t, valid)
 		expectedNoCache := []string{"foo", "bar"}
 		var gotNoCache []string

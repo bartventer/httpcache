@@ -1,4 +1,4 @@
-// Copyright (c) 2025 Bart Venter <bartventer@proton.me>
+// Copyright (c) 2026 Bart Venter <72999113+bartventer@users.noreply.github.com>
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ import (
 )
 
 // VaryMatcher defines the interface implemented by types that can match
-// request headers nominated by the a cached response's Vary header against
+// request headers nominated by a cached response's Vary header against
 // the headers of an incoming request.
 type VaryMatcher interface {
 	VaryHeadersMatch(cachedHdrs ResponseRefs, reqHdr http.Header) (int, bool)

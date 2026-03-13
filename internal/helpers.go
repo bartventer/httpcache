@@ -1,4 +1,4 @@
-// Copyright (c) 2025 Bart Venter <bartventer@proton.me>
+// Copyright (c) 2026 Bart Venter <72999113+bartventer@users.noreply.github.com>
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,28 +21,19 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-)
 
-func defaultPort(scheme string) string {
-	switch scheme {
-	case "http":
-		return "80"
-	case "https":
-		return "443"
-	default:
-		return ""
-	}
-}
+	"github.com/bartventer/httpcache/internal/urlutil"
+)
 
 // sameOrigin checks if two URIs have the same origin (scheme, host, port).
 func sameOrigin(a, b *url.URL) bool {
 	aPort := a.Port()
 	if aPort == "" {
-		aPort = defaultPort(a.Scheme)
+		aPort = urlutil.DefaultPort(a.Scheme)
 	}
 	bPort := b.Port()
 	if bPort == "" {
-		bPort = defaultPort(b.Scheme)
+		bPort = urlutil.DefaultPort(b.Scheme)
 	}
 	return strings.EqualFold(a.Scheme, b.Scheme) &&
 		strings.EqualFold(a.Hostname(), b.Hostname()) &&
@@ -74,7 +65,7 @@ func hopByHopHeaders(respHeader http.Header) map[string]struct{} {
 		// Also see net/http/response.go "respExcludeHeader" for additional excluded headers.
 	}
 	// Fields listed in the Connection header field
-	for field := range TrimmedCSVCanonicalSeq(respHeader.Get("Connection")) {
+	for field := range TrimmedCSVCanonical(respHeader.Get("Connection")) {
 		m[field] = struct{}{}
 	}
 	return m
@@ -116,43 +107,6 @@ func isStaleErrorAllowed(code int) bool {
 	}
 }
 
-// From Go's net/url package.
-// Copyright 2009 The Go Authors. All rights reserved.
-//
-// splitHostPort separates host and port. If the port is not valid, it returns
-// the entire input as host, and it doesn't check the validity of the host.
-// Unlike net.SplitHostPort, but per RFC 3986, it requires ports to be numeric.
-func splitHostPort(hostPort string) (host, port string) {
-	host = hostPort
-	colon := strings.LastIndexByte(host, ':')
-	if colon != -1 && validOptionalPort(host[colon:]) {
-		host, port = host[:colon], host[colon+1:]
-	}
-	if strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
-		host = host[1 : len(host)-1]
-	}
-	return
-}
-
-// From Go's net/url package.
-// Copyright 2009 The Go Authors. All rights reserved.
-//
-// validOptionalPort reports whether port is either an empty string or matches "/^:\d*$/".
-func validOptionalPort(port string) bool {
-	if port == "" {
-		return true
-	}
-	if port[0] != ':' {
-		return false
-	}
-	for _, b := range port[1:] {
-		if b < '0' || b > '9' {
-			return false
-		}
-	}
-	return true
-}
-
 func IsUnsafeMethod(method string) bool {
 	switch method {
 	case http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch:
@@ -166,9 +120,9 @@ func IsNonErrorStatus(status int) bool {
 	return (status >= 200 && status < 400)
 }
 
-// TrimmedCSVSeq returns an iterator over the raw comma-separated string.
+// TrimmedCSV returns an iterator over the raw comma-separated string.
 // It yields each part of the string, trimmed of whitespace, and does not split inside quoted strings.
-func TrimmedCSVSeq(s string) iter.Seq[string] {
+func TrimmedCSV(s string) iter.Seq[string] {
 	return func(yield func(string) bool) {
 		var part strings.Builder
 		inQuotes := false
@@ -206,14 +160,19 @@ func TrimmedCSVSeq(s string) iter.Seq[string] {
 	}
 }
 
-// TrimmedCSVCanonicalSeq is the same as [TrimmedCSVSeq], but it yields each part
+// TrimmedCSVCanonical is the same as [TrimmedCSV], but it yields each part
 // in canonical form.
-func TrimmedCSVCanonicalSeq(s string) iter.Seq[string] {
+func TrimmedCSVCanonical(s string) iter.Seq[string] {
 	return func(yield func(string) bool) {
-		for part := range TrimmedCSVSeq(s) {
+		for part := range TrimmedCSV(s) {
 			if !yield(http.CanonicalHeaderKey(part)) {
 				return
 			}
 		}
 	}
+}
+
+func hasToken[Map ~map[K]V, K comparable, V any](m Map, token K) bool {
+	_, ok := m[token]
+	return ok
 }

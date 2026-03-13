@@ -1,4 +1,4 @@
-// Copyright (c) 2025 Bart Venter <bartventer@proton.me>
+// Copyright (c) 2026 Bart Venter <72999113+bartventer@users.noreply.github.com>
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -108,6 +108,7 @@ func retrieve(conn driver.Conn) http.Handler {
 		}
 		w.Header().Set("Content-Type", "application/octet-stream")
 		w.WriteHeader(http.StatusOK)
+		//nolint:gosec // (G705) Intended: serve binary cache bytes for debugging.
 		if _, err := w.Write(value); err != nil {
 			http.Error(
 				w,

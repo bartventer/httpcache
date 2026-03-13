@@ -109,7 +109,7 @@ linters:
     goheader:
       values:
         const:
-          AUTHOR: "Bart Venter <bartventer@proton.me>"
+          AUTHOR: "Bart Venter <72999113+bartventer@users.noreply.github.com>"
       template: |-
         Copyright (c) {{ YEAR }} {{ AUTHOR }}
 

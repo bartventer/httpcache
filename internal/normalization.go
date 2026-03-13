@@ -1,4 +1,4 @@
-// Copyright (c) 2025 Bart Venter <bartventer@proton.me>
+// Copyright (c) 2026 Bart Venter <72999113+bartventer@users.noreply.github.com>
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -142,7 +142,7 @@ func normalizeHeaderValue(field, value string) string {
 
 // normalizeOrderInsensitive normalizes comma-separated values where order doesn't matter.
 func normalizeOrderInsensitive(value string) string {
-	parts := slices.Sorted(TrimmedCSVSeq(value))
+	parts := slices.Sorted(TrimmedCSV(value))
 	return strings.Join(parts, ",")
 }
 
@@ -163,7 +163,7 @@ func normalizeOrderInsensitiveWithQValues(value string) string {
 		q      unique.Handle[float64] // the quality value (q=0.8); default is 1.0
 		params []string               // any additional parameters (sorted)
 	}
-	parts := slices.Collect(TrimmedCSVSeq(value))
+	parts := slices.Collect(TrimmedCSV(value))
 	qualityParts := make([]qualityValue, 0, len(parts))
 outer:
 	for i := range parts {
@@ -192,13 +192,10 @@ outer:
 			}
 			slices.Sort(params)
 		}
-		if cap(params) > len(params) {
-			params = slices.Clip(params)
-		}
 		qualityParts = append(qualityParts, qualityValue{
 			main:   main,
 			q:      q,
-			params: params,
+			params: slices.Clip(params),
 		})
 	}
 
@@ -262,6 +259,23 @@ func normalizeEncodingHeader(value string) string {
 	return normalizeOrderInsensitive(value)
 }
 
+func normalizedVaryHeader(vary string, reqHeader http.Header) iter.Seq2[string, string] {
+	return func(yield func(string, string) bool) {
+		for name := range TrimmedCSVCanonical(vary) {
+			values := reqHeader[name]
+			value := ""
+			// an empty value is valid and means "no variation"
+			if len(values) > 0 {
+				// NOTE: The policy of this cache is to use just the first header line
+				value = normalizeHeaderValue(name, values[0])
+			}
+			if !yield(name, value) {
+				return
+			}
+		}
+	}
+}
+
 // VaryHeaderNormalizer describes the interface implemented by types that can
 // normalize request header field values given a Vary header field value, as per
 // RFC 9111 §4.1.
@@ -277,27 +291,13 @@ func (f VaryHeaderNormalizerFunc) NormalizeVaryHeader(
 ) iter.Seq2[string, string] {
 	return f(vary, reqHeader)
 }
+
 func NewVaryHeaderNormalizer() VaryHeaderNormalizer {
-	return VaryHeaderNormalizerFunc(normalizeVaryHeaderSeq2)
+	return VaryHeaderNormalizerFunc(normalizedVaryHeader)
 }
 
-func normalizeVaryHeaderSeq2(vary string, reqHeader http.Header) iter.Seq2[string, string] {
-	return func(yield func(string, string) bool) {
-		for name := range TrimmedCSVCanonicalSeq(vary) {
-			values := reqHeader[name]
-			value := ""
-			// an empty value is valid and means "no variation"
-			if len(values) > 0 {
-				// NOTE: The policy of this cache is to use just the first header line
-				value = normalizeHeaderValue(name, values[0])
-			}
-			if !yield(name, value) {
-				return
-			}
-		}
-	}
-}
-
+// HeaderValueNormalizer describes the interface implemented by types that can normalize
+// header field values according to the rules defined in RFC 9111 §4.1.
 type HeaderValueNormalizer interface {
 	NormalizeHeaderValue(field, value string) string
 }
