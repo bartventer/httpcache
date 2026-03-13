@@ -15,6 +15,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
+        version: [1.25.x, 1.26.x]
     runs-on: ${{ matrix.os }}
     env:
       OUTPUTDIR: coverage
@@ -25,8 +26,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.4.0
         with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
+          go-version: ${{ matrix.version }}
 
       - name: Run tests
         run: make test
