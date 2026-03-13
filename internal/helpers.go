@@ -65,7 +65,7 @@ func hopByHopHeaders(respHeader http.Header) map[string]struct{} {
 		// Also see net/http/response.go "respExcludeHeader" for additional excluded headers.
 	}
 	// Fields listed in the Connection header field
-	for field := range TrimmedCSVCanonicalSeq(respHeader.Get("Connection")) {
+	for field := range TrimmedCSVCanonical(respHeader.Get("Connection")) {
 		m[field] = struct{}{}
 	}
 	return m
@@ -120,9 +120,9 @@ func IsNonErrorStatus(status int) bool {
 	return (status >= 200 && status < 400)
 }
 
-// TrimmedCSVSeq returns an iterator over the raw comma-separated string.
+// TrimmedCSV returns an iterator over the raw comma-separated string.
 // It yields each part of the string, trimmed of whitespace, and does not split inside quoted strings.
-func TrimmedCSVSeq(s string) iter.Seq[string] {
+func TrimmedCSV(s string) iter.Seq[string] {
 	return func(yield func(string) bool) {
 		var part strings.Builder
 		inQuotes := false
@@ -160,14 +160,19 @@ func TrimmedCSVSeq(s string) iter.Seq[string] {
 	}
 }
 
-// TrimmedCSVCanonicalSeq is the same as [TrimmedCSVSeq], but it yields each part
+// TrimmedCSVCanonical is the same as [TrimmedCSV], but it yields each part
 // in canonical form.
-func TrimmedCSVCanonicalSeq(s string) iter.Seq[string] {
+func TrimmedCSVCanonical(s string) iter.Seq[string] {
 	return func(yield func(string) bool) {
-		for part := range TrimmedCSVSeq(s) {
+		for part := range TrimmedCSV(s) {
 			if !yield(http.CanonicalHeaderKey(part)) {
 				return
 			}
 		}
 	}
+}
+
+func hasToken[Map ~map[K]V, K comparable, V any](m Map, token K) bool {
+	_, ok := m[token]
+	return ok
 }

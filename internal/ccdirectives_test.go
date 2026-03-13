@@ -84,7 +84,7 @@ func TestParseCCRequestDirectives_AllDirectives(t *testing.T) {
 
 	t.Run("NoCache (quoted CSV)", func(t *testing.T) {
 		raw := got["no-cache"]
-		noCacheSeq, valid := RawCSVSeq(ParseQuotedString(raw)).Value()
+		noCacheSeq, valid := RawCSV(ParseQuotedString(raw)).Value()
 		testutil.RequireTrue(t, valid)
 		expectedNoCache := []string{"foo", "bar"}
 		var gotNoCache []string

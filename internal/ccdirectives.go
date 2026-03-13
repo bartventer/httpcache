@@ -60,33 +60,32 @@ func (r RawDeltaSeconds) Value() (dur time.Duration, valid bool) {
 	return time.Duration(seconds) * time.Second, true
 }
 
-// RawCSVSeq is a string that represents a sequence of comma-separated values.
-type RawCSVSeq string
+// RawCSV is a string that represents a sequence of comma-separated values.
+type RawCSV string
 
 // Value returns an iterator over the raw comma-separated string and a boolean indicating
 // whether the result is valid.
-func (s RawCSVSeq) Value() (seq iter.Seq[string], valid bool) {
+func (s RawCSV) Value() (seq iter.Seq[string], valid bool) {
 	if len(s) == 0 {
 		return
 	}
-	return TrimmedCSVSeq(string(s)), true
+	return TrimmedCSV(string(s)), true
 }
 
-// directivesSeq2 returns an iterator over all key-value pairs in a string of
+// directives returns an iterator over all key-value pairs in a string of
 // cache directives (as specified in 9111, §5.2.1 and 5.2.2). The
 // iterator yields the key (token) and value (argument) of each directive.
 //
 // It guarantees that the key is always non-empty, and if a value is not
 // present, it yields an empty string as the value.
-func directivesSeq2(s string) iter.Seq2[string, string] {
+func directives(s string) iter.Seq2[string, string] {
 	return func(yield func(string, string) bool) {
-		for part := range TrimmedCSVSeq(s) {
+		for part := range TrimmedCSV(s) {
 			key, value, found := strings.Cut(part, "=")
 			if !found {
 				key = textproto.TrimString(part)
 				value = ""
 			} else {
-				// value = textproto.TrimString(ParseQuotedString(value))
 				value = textproto.TrimString(value)
 			}
 			if len(key) == 0 {
@@ -102,12 +101,7 @@ func directivesSeq2(s string) iter.Seq2[string, string] {
 // parseDirectives parses a string of cache directives and returns a map
 // where the keys are the directive names and the values are the arguments.
 func parseDirectives(s string) map[string]string {
-	return maps.Collect(directivesSeq2(s))
-}
-
-func hasToken(d map[string]string, token string) bool {
-	_, ok := d[token]
-	return ok
+	return maps.Collect(directives(s))
 }
 
 func getDurationDirective(d map[string]string, token string) (dur time.Duration, valid bool) {
@@ -213,12 +207,12 @@ func (d CCResponseDirectives) MustUnderstand() bool {
 }
 
 // NoCache parses the "no-cache" response directive as defined in RFC 9111, §5.2.2.4.
-func (d CCResponseDirectives) NoCache() (fields RawCSVSeq, present bool) {
+func (d CCResponseDirectives) NoCache() (fields RawCSV, present bool) {
 	v, ok := d["no-cache"]
 	if !ok {
 		return
 	}
-	return RawCSVSeq(ParseQuotedString(v)), true
+	return RawCSV(ParseQuotedString(v)), true
 }
 
 // NoStore reports the presence of the "no-store" response directive as defined in RFC 9111, §5.2.2.5.

@@ -19,7 +19,6 @@ import (
 	"cmp"
 	"errors"
 	"reflect"
-	"testing"
 )
 
 var ErrSample = errors.New("an error")
@@ -30,32 +29,37 @@ type T interface {
 	Fatalf(format string, args ...interface{})
 }
 
+type testFunc func(format string, args ...interface{})
+
+func (tf testFunc) do(fallback string, msgAndArgs ...interface{}) {
+	if len(msgAndArgs) > 0 {
+		if format, ok := msgAndArgs[0].(string); ok && len(msgAndArgs) > 1 {
+			tf(format, msgAndArgs[1:]...)
+		} else {
+			tf("%v", msgAndArgs...)
+		}
+	} else {
+		tf(fallback)
+	}
+}
+
 func assert(t T, condition bool, msgAndArgs ...interface{}) bool {
 	t.Helper()
-	//nolint:nestif // Acceptable for readability
 	if !condition {
-		if len(msgAndArgs) > 0 {
-			if format, ok := msgAndArgs[0].(string); ok && len(msgAndArgs) > 1 {
-				t.Errorf(format, msgAndArgs[1:]...)
-			} else {
-				t.Errorf("%v", msgAndArgs...)
-			}
-		} else {
-			t.Errorf("assert failed")
-		}
+		testFunc(t.Errorf).do("assert failed", msgAndArgs...)
 		return false
 	}
 	return true
 }
 
-func require(t *testing.T, condition bool, msgAndArgs ...interface{}) {
+func require(t T, condition bool, msgAndArgs ...interface{}) {
 	t.Helper()
 	if !condition {
-		t.Fatalf("require failed: %s", msgAndArgs)
+		testFunc(t.Fatalf).do("require failed", msgAndArgs...)
 	}
 }
 
-func AssertEqual[T cmp.Ordered](t *testing.T, expected, actual T, msgAndArgs ...interface{}) bool {
+func AssertEqual[V cmp.Ordered](t T, expected, actual V, msgAndArgs ...interface{}) bool {
 	t.Helper()
 	got := cmp.Compare(expected, actual)
 	return assert(
@@ -68,35 +72,35 @@ func AssertEqual[T cmp.Ordered](t *testing.T, expected, actual T, msgAndArgs ...
 	)
 }
 
-func AssertTrue(t *testing.T, condition bool, msgAndArgs ...interface{}) bool {
+func AssertTrue(t T, condition bool, msgAndArgs ...interface{}) bool {
 	t.Helper()
 	return assert(t, condition, "assertTrue failed: condition is false, %s", msgAndArgs)
 }
 
-func hasError(t *testing.T, err error) bool {
+func hasError(t T, err error) bool {
 	t.Helper()
 	return err != nil
 }
 
-func RequireError(t *testing.T, err error, msgAndArgs ...interface{}) {
+func RequireError(t T, err error, msgAndArgs ...interface{}) {
 	t.Helper()
 	got := hasError(t, err)
 	require(t, got, "requireError failed: expected error, got nil, %s", msgAndArgs)
 }
 
-func RequireNoError(t *testing.T, err error, msgAndArgs ...interface{}) {
+func RequireNoError(t T, err error, msgAndArgs ...interface{}) {
 	t.Helper()
 	got := hasError(t, err)
 	require(t, !got, "requireNoError failed: expected no error, got %v, %s", err, msgAndArgs)
 }
 
-func RequireErrorIs(t *testing.T, err error, target error, msgAndArgs ...interface{}) {
+func RequireErrorIs(t T, err error, target error, msgAndArgs ...interface{}) {
 	t.Helper()
 	got := errors.Is(err, target)
 	require(t, got, "requireErrorIs failed: expected error %v, got %v, %s", target, err, msgAndArgs)
 }
 
-func RequireErrorAs(t *testing.T, err error, target interface{}, msgAndArgs ...interface{}) {
+func RequireErrorAs(t T, err error, target interface{}, msgAndArgs ...interface{}) {
 	t.Helper()
 	got := errors.As(err, target)
 	require(
@@ -109,7 +113,7 @@ func RequireErrorAs(t *testing.T, err error, target interface{}, msgAndArgs ...i
 	)
 }
 
-func RequireTrue(t *testing.T, condition bool, msgAndArgs ...interface{}) {
+func RequireTrue(t T, condition bool, msgAndArgs ...interface{}) {
 	t.Helper()
 	require(
 		t,
@@ -140,7 +144,7 @@ func isNil(object interface{}) bool {
 	return false
 }
 
-func AssertNil(t *testing.T, object interface{}, msgAndArgs ...interface{}) bool {
+func AssertNil(t T, object interface{}, msgAndArgs ...interface{}) bool {
 	t.Helper()
 	got := isNil(object)
 	return assert(
@@ -152,7 +156,7 @@ func AssertNil(t *testing.T, object interface{}, msgAndArgs ...interface{}) bool
 	)
 }
 
-func AssertNotNil(t *testing.T, object interface{}, msgAndArgs ...interface{}) bool {
+func AssertNotNil(t T, object interface{}, msgAndArgs ...interface{}) bool {
 	t.Helper()
 	got := !isNil(object)
 	return assert(
@@ -163,7 +167,7 @@ func AssertNotNil(t *testing.T, object interface{}, msgAndArgs ...interface{}) b
 	)
 }
 
-func RequireNotNil(t *testing.T, object interface{}, msgAndArgs ...interface{}) {
+func RequireNotNil(t T, object interface{}, msgAndArgs ...interface{}) {
 	t.Helper()
 	got := isNil(object)
 	require(
@@ -174,7 +178,7 @@ func RequireNotNil(t *testing.T, object interface{}, msgAndArgs ...interface{}) 
 	)
 }
 
-func RequirePanics(t *testing.T, f func(), msgAndArgs ...interface{}) bool {
+func RequirePanics(t T, f func(), msgAndArgs ...interface{}) bool {
 	t.Helper()
 	defer func() {
 		got := recover()

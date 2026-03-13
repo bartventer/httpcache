@@ -21,7 +21,7 @@ import (
 )
 
 // VaryMatcher defines the interface implemented by types that can match
-// request headers nominated by the a cached response's Vary header against
+// request headers nominated by a cached response's Vary header against
 // the headers of an incoming request.
 type VaryMatcher interface {
 	VaryHeadersMatch(cachedHdrs ResponseRefs, reqHdr http.Header) (int, bool)
