@@ -1,4 +1,4 @@
-// Copyright (c) 2025 Bart Venter <bartventer@proton.me>
+// Copyright (c) 2026 Bart Venter <72999113+bartventer@users.noreply.github.com>
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
