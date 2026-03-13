@@ -32,4 +32,4 @@ func (f URLKeyerFunc) URLKey(u *url.URL) string {
 	return f(u)
 }
 
-func NewURLKeyer() URLKeyer { return URLKeyerFunc(urlkey.FromURL) }
+func NewURLKeyer() URLKeyer { return URLKeyerFunc(urlkey.Normalize) }

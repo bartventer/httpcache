@@ -21,14 +21,14 @@ import (
 	"github.com/bartventer/httpcache/pkg/urlkey"
 )
 
-func ExampleFromURL() {
+func ExampleNormalize() {
 	u, err := url.Parse(
 		"https://example.com:8443/abc?query=param&another=value#fragment=part1&part2",
 	)
 	if err != nil {
 		panic(err)
 	}
-	key := urlkey.FromURL(u)
+	key := urlkey.Normalize(u)
 	fmt.Println(key)
 	// Output:
 	// https://example.com:8443/abc?query=param&another=value

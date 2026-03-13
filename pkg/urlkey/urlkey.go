@@ -31,13 +31,13 @@ import (
 	"github.com/bartventer/httpcache/internal/urlutil"
 )
 
-// FromURL returns a normalized URL string suitable for use as a cache key.
+// Normalize returns a normalized URL string suitable for use as a cache key.
 //
 // It normalizes scheme/host case, default ports, dot-segments, and
 // percent-encoding (for path and query), and excludes fragments.
 //
 // For opaque URLs (u.Opaque != ""), the opaque value is returned unchanged.
-func FromURL(u *url.URL) string {
+func Normalize(u *url.URL) string {
 	if u.Opaque != "" {
 		return u.Opaque
 	}
