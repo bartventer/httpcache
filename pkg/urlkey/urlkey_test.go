@@ -80,6 +80,6 @@ func TestFromURL(t *testing.T) {
 			t.Errorf("url.Parse(%q) failed: %v", tt.raw, err)
 			continue
 		}
-		testutil.AssertEqual(t, FromURL(u), tt.expected, "FromURL(%q)", tt.raw)
+		testutil.AssertEqual(t, Normalize(u), tt.expected, "FromURL(%q)", tt.raw)
 	}
 }
