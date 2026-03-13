@@ -108,6 +108,7 @@ func retrieve(conn driver.Conn) http.Handler {
 		}
 		w.Header().Set("Content-Type", "application/octet-stream")
 		w.WriteHeader(http.StatusOK)
+		//nolint:gosec // (G705) Intended: serve binary cache bytes for debugging.
 		if _, err := w.Write(value); err != nil {
 			http.Error(
 				w,
