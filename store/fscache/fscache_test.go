@@ -23,6 +23,8 @@ import (
 	"net/url"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -253,6 +255,30 @@ func Test_parseTimeout(t *testing.T) {
 	}
 }
 
+func Test_parseUmask(t *testing.T) {
+	tests := []struct {
+		name    string
+		v       string
+		want    fs.FileMode
+		wantErr bool
+	}{
+		{"empty", "", 0, true},
+		{"valid", "022", fs.FileMode(0o022), false},
+		{"invalid", "invalid", 0, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseUmask(tt.v)
+			if tt.wantErr {
+				testutil.RequireError(t, err)
+			} else {
+				testutil.RequireNoError(t, err)
+				testutil.AssertEqual(t, tt.want, got, "parseUmask(%q)", tt.v)
+			}
+		})
+	}
+}
+
 func TestFSCache_SetGet_WithEncryption(t *testing.T) {
 	u, err := url.Parse("fscache://" + filepath.ToSlash(t.TempDir()) +
 		"?appname=testapp&encrypt=aesgcm&encrypt_key=6S-Ks2YYOW0xMvTzKSv6QD30gZeOi1c6Ydr-As5csWk=")
@@ -318,4 +344,67 @@ func Test_fsCache_SetGet_UpdateMTime(t *testing.T) {
 	mtime2 := info2.ModTime()
 
 	testutil.AssertTrue(t, mtime2.After(mtime1))
+}
+
+func Test_fsCache_SetGet_Umask(t *testing.T) {
+	umask := fs.FileMode(0o077)
+	if runtime.GOOS == "windows" {
+		umask = fs.FileMode(0)
+	}
+	u, err := url.Parse("fscache://" + filepath.ToSlash(t.TempDir()) +
+		"?appname=testapp&umask=" + strconv.FormatUint(uint64(umask), 8))
+	testutil.RequireNoError(t, err)
+	cache, err := fromURL(u)
+	testutil.RequireNoError(t, err)
+	t.Cleanup(func() { cache.Close() })
+
+	keyName := "mykey"
+	value := []byte("some value")
+
+	err = cache.Set(keyName, value)
+	testutil.RequireNoError(t, err)
+
+	// Check file permissions
+	fname := cache.fn.FileName(keyName)
+	info1, err := fs.Stat(cache.root.FS(), fname)
+	testutil.RequireNoError(t, err)
+	testutil.AssertTrue(t, info1.Mode().Perm()&umask == 0)
+
+	// Check parent directory permissions
+	info2, err := fs.Stat(cache.root.FS(), filepath.Dir(fname))
+	testutil.RequireNoError(t, err)
+	testutil.AssertTrue(t, info2.Mode().Perm()&umask == 0)
+}
+
+func Test_fsCache_SetUmaskErrors(t *testing.T) {
+	t.Run("empty", func(t *testing.T) {
+		u, err := url.Parse("fscache://" + filepath.ToSlash(t.TempDir()) +
+			"?appname=testapp&umask=")
+		testutil.RequireNoError(t, err)
+		_, err = fromURL(u)
+		testutil.RequireError(t, err)
+		testutil.AssertTrue(t, strings.Contains(err.Error(), "empty umask"))
+	})
+
+	t.Run("invalid", func(t *testing.T) {
+		u, err := url.Parse("fscache://" + filepath.ToSlash(t.TempDir()) +
+			"?appname=testapp&umask=1000")
+		testutil.RequireNoError(t, err)
+		_, err = fromURL(u)
+		testutil.RequireError(t, err)
+		testutil.AssertTrue(t, strings.Contains(err.Error(), "invalid umask"))
+	})
+
+	t.Run("unsupported on windows", func(t *testing.T) {
+		u, err := url.Parse("fscache://" + filepath.ToSlash(t.TempDir()) +
+			"?appname=testapp&umask=200")
+		testutil.RequireNoError(t, err)
+		_, err = fromURL(u)
+		if runtime.GOOS == "windows" {
+			testutil.RequireError(t, err)
+			testutil.AssertTrue(t, strings.Contains(err.Error(), "unsupported umask"))
+		} else {
+			testutil.RequireNoError(t, err)
+		}
+	})
 }
